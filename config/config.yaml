@@ -1,0 +1,61 @@
+# ═══════════════════════════════════════════════════════════════
+# Polymarket ML Trading Signal Analyzer - Configuration
+# ═══════════════════════════════════════════════════════════════
+
+# API URLs
+api:
+  gamma_base: "https://gamma-api.polymarket.com"
+  clob_base: "https://clob.polymarket.com"
+  data_base: "https://data-api.polymarket.com"
+  rate_limit_delay: 0.2  # seconds between API calls
+
+# Data fetching
+data:
+  max_active_markets: 2000
+  max_resolved_markets: 5000
+  max_order_books: 500
+  max_price_histories: 500
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+
+# Feature engineering
+features:
+  numerical_features: 14
+  text_model: "all-MiniLM-L6-v2"
+  text_embed_dim: 384
+  use_dummy_text: false  # Set to true for testing without sentence-transformers
+
+# Model hyperparameters
+model:
+  task: "classification"  # "classification" or "regression"
+  num_categories: 20
+  category_embed_dim: 8
+  hidden_dims: [256, 128, 64]
+  dropout: 0.3
+
+# Training
+training:
+  epochs: 50
+  learning_rate: 0.001
+  batch_size: 64
+  val_split: 0.2
+  weight_decay: 0.0001
+  use_weighted_sampler: true
+  save_dir: "data/models"
+
+# Scoring & Signals
+scoring:
+  top_k: 20
+  max_markets: 1000
+  buy_threshold: 0.6
+  strong_buy_threshold: 0.75
+  min_liquidity: 1000.0
+  min_volume_24h: 100.0
+  max_spread: 0.10
+  min_alpha: 0.05
+
+# Backtesting
+backtesting:
+  initial_capital: 1000.0
+  position_size: 0.05
+  threshold: 0.6
