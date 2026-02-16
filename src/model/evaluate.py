@@ -1,5 +1,7 @@
 """Evaluación del modelo y backtesting."""
 
+import logging
+
 import numpy as np
 import pandas as pd
 import torch
@@ -15,6 +17,8 @@ from sklearn.metrics import (
 )
 
 from .architecture import MarketValueNet
+
+logger = logging.getLogger(__name__)
 
 
 def evaluate_model(
@@ -167,8 +171,15 @@ def backtest(
                     "pnl": pnl,
                     "capital_after": capital,
                 })
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Backtest: market %s omitido: %s",
+                market.get("id", "?"), e,
+            )
             continue
+
+    if not trades:
+        logger.warning("Backtest: no se ejecutó ningún trade.")
 
     trades_df = pd.DataFrame(trades)
     return trades_df, capital

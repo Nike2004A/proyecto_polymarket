@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +12,8 @@ from torch.utils.data import DataLoader
 
 from .architecture import MarketValueNet
 from .dataset import PolymarketDataset, create_dataloaders
+
+logger = logging.getLogger(__name__)
 
 
 def train_model(
@@ -123,44 +126,75 @@ def train_model(
 
 
 def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
     parser = argparse.ArgumentParser(description="Train MarketValueNet")
     parser.add_argument("--config", default="config/config.yaml")
-    parser.add_argument("--data-dir", default="data/processed")
-    parser.add_argument("--save-dir", default="data/models")
-    parser.add_argument("--epochs", type=int, default=50)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--task", choices=["classification", "regression"], default="classification")
+    parser.add_argument("--data-dir", default=None)
+    parser.add_argument("--save-dir", default=None)
+    parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--task", choices=["classification", "regression"], default=None)
     args = parser.parse_args()
 
+    # Cargar config.yaml como base, CLI args sobrescriben
+    from ..config import load_config
+    cfg = load_config(args.config)
+    training_cfg = cfg.get("training", {})
+    model_cfg = cfg.get("model", {})
+    data_cfg = cfg.get("data", {})
+
+    data_dir = args.data_dir or data_cfg.get("processed_dir", "data/processed")
+    save_dir = args.save_dir or training_cfg.get("save_dir", "data/models")
+    epochs = args.epochs or training_cfg.get("epochs", 50)
+    lr = args.lr or training_cfg.get("learning_rate", 1e-3)
+    batch_size = args.batch_size or training_cfg.get("batch_size", 64)
+    task = args.task or model_cfg.get("task", "classification")
+
+    logger.info("Config cargada desde %s", args.config)
+    logger.info("  data_dir=%s, save_dir=%s, epochs=%d, lr=%s, batch_size=%d, task=%s",
+                data_dir, save_dir, epochs, lr, batch_size, task)
+
     # Cargar datos
-    print("Cargando dataset...")
-    dataset = PolymarketDataset.from_numpy_dir(args.data_dir)
-    print(f"  Samples: {len(dataset)}")
-    print(f"  Positivos: {int(dataset.labels.sum())}")
-    print(f"  Negativos: {len(dataset) - int(dataset.labels.sum())}")
+    logger.info("Cargando dataset...")
+    dataset = PolymarketDataset.from_numpy_dir(data_dir)
+    logger.info("  Samples: %d", len(dataset))
+    logger.info("  Positivos: %d", int(dataset.labels.sum()))
+    logger.info("  Negativos: %d", len(dataset) - int(dataset.labels.sum()))
+    if dataset.timestamps is not None:
+        logger.info("  Timestamps disponibles: temporal split habilitado.")
+    else:
+        logger.warning("  No hay timestamps: se usará random split.")
 
     train_loader, val_loader = create_dataloaders(
-        dataset, batch_size=args.batch_size
+        dataset, batch_size=batch_size, temporal_split=True
     )
 
     # Crear modelo
     model = MarketValueNet(
         num_numerical_features=dataset.numerical.shape[1],
-        task=args.task,
+        num_categories=model_cfg.get("num_categories", 20),
+        category_embed_dim=model_cfg.get("category_embed_dim", 8),
+        text_embed_dim=dataset.text_emb.shape[1],
+        hidden_dims=model_cfg.get("hidden_dims", [256, 128, 64]),
+        dropout=model_cfg.get("dropout", 0.3),
+        task=task,
     )
-    print(f"\nModelo: {model}")
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Parámetros totales: {total_params:,}")
+    logger.info("Modelo creado: %d parámetros", total_params)
 
     # Entrenar
     history = train_model(
         model,
         train_loader,
         val_loader,
-        epochs=args.epochs,
-        lr=args.lr,
-        save_dir=args.save_dir,
+        epochs=epochs,
+        lr=lr,
+        save_dir=save_dir,
     )
 
 

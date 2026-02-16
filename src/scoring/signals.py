@@ -1,7 +1,11 @@
 """Generación de señales de compra/venta basadas en el scoring del modelo."""
 
-import pandas as pd
+import logging
+
 import numpy as np
+import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def generate_signals(
@@ -11,19 +15,21 @@ def generate_signals(
     min_liquidity: float = 1000.0,
     min_volume_24h: float = 100.0,
     max_spread: float = 0.10,
-    min_alpha: float = 0.05,
 ) -> pd.DataFrame:
     """
     Genera señales de compra a partir del DataFrame de mercados puntuados.
 
+    NOTA IMPORTANTE: Las señales se basan en el model_score, que es un score
+    de clasificación NO calibrado. No debe interpretarse como probabilidad
+    real de profit. Las señales son indicativas y requieren análisis adicional.
+
     Args:
         scored_df: DataFrame con columnas model_score, price_yes, liquidity, etc.
-        buy_threshold: Umbral mínimo para señal de compra.
-        strong_buy_threshold: Umbral para señal de compra fuerte.
+        buy_threshold: Umbral mínimo de score para señal de compra.
+        strong_buy_threshold: Umbral de score para señal fuerte.
         min_liquidity: Liquidez mínima requerida.
         min_volume_24h: Volumen 24h mínimo.
         max_spread: Spread máximo aceptable.
-        min_alpha: Alpha mínimo esperado.
 
     Returns:
         DataFrame con señales añadidas.
@@ -40,18 +46,21 @@ def generate_signals(
         & (df["spread"] <= max_spread)
     )
 
-    # Señales de compra
-    buy_mask = (
-        quality_mask
-        & (df["model_score"] >= buy_threshold)
-        & (df["expected_alpha"] >= min_alpha)
-    )
+    filtered_out = (~quality_mask).sum()
+    if filtered_out > 0:
+        logger.info(
+            "%d/%d mercados filtrados por calidad (liquidez/volumen/spread).",
+            filtered_out, len(df),
+        )
+
+    # Señales de compra (basadas solo en score, sin "alpha" no calibrado)
+    buy_mask = quality_mask & (df["model_score"] >= buy_threshold)
     strong_buy_mask = buy_mask & (df["model_score"] >= strong_buy_threshold)
 
     df.loc[buy_mask, "signal"] = "BUY"
     df.loc[strong_buy_mask, "signal"] = "STRONG BUY"
 
-    # Confianza (normalizada entre 0-1)
+    # Confianza relativa (normalizada entre 0-1, útil solo para ranking)
     df["confidence"] = np.clip(
         (df["model_score"] - buy_threshold) / (1 - buy_threshold),
         0, 1,
@@ -59,16 +68,16 @@ def generate_signals(
 
     # Razón de la señal
     df["signal_reason"] = ""
-    df.loc[strong_buy_mask, "signal_reason"] = "Alto score + alpha positivo + buena liquidez"
-    df.loc[buy_mask & ~strong_buy_mask, "signal_reason"] = "Score aceptable + alpha positivo"
+    df.loc[strong_buy_mask, "signal_reason"] = "Score alto + buena liquidez"
+    df.loc[buy_mask & ~strong_buy_mask, "signal_reason"] = "Score aceptable"
     df.loc[~quality_mask, "signal_reason"] = "Filtrado por calidad (liquidez/volumen/spread)"
 
-    # Tamaño de posición sugerido (Kelly simplificado)
+    # Tamaño de posición sugerido (conservador, basado en confianza relativa)
     df["suggested_position_pct"] = 0.0
     df.loc[buy_mask, "suggested_position_pct"] = np.clip(
-        df.loc[buy_mask, "expected_alpha"] * df.loc[buy_mask, "confidence"] * 100,
+        df.loc[buy_mask, "confidence"] * 5.0,  # max 5% del capital
         1.0,
-        10.0,
+        5.0,
     )
 
     # URL de Polymarket
@@ -85,6 +94,15 @@ def format_signals_report(signals_df: pd.DataFrame) -> str:
     lines.append("=" * 80)
     lines.append("POLYMARKET TRADING SIGNALS REPORT")
     lines.append("=" * 80)
+    lines.append(
+        "\nDISCLAIMER: Estas señales se basan en un modelo de clasificación"
+    )
+    lines.append(
+        "no calibrado. NO representan probabilidades reales ni retornos"
+    )
+    lines.append(
+        "esperados. Usar solo como punto de partida para análisis propio."
+    )
 
     # Resumen
     signal_counts = signals_df["signal"].value_counts()
@@ -102,11 +120,10 @@ def format_signals_report(signals_df: pd.DataFrame) -> str:
             lines.append(f"\n  {row['question'][:70]}")
             lines.append(
                 f"    Score: {row['model_score']:.3f} | "
-                f"Precio: ${row['price_yes']:.2f} | "
-                f"Alpha: {row['expected_alpha']:.3f}"
+                f"Precio: ${row['price_yes']:.2f}"
             )
             lines.append(
-                f"    Confianza: {row['confidence']:.1%} | "
+                f"    Confianza (relativa): {row['confidence']:.1%} | "
                 f"Posición sugerida: {row['suggested_position_pct']:.1f}%"
             )
 
@@ -120,8 +137,7 @@ def format_signals_report(signals_df: pd.DataFrame) -> str:
             lines.append(f"\n  {row['question'][:70]}")
             lines.append(
                 f"    Score: {row['model_score']:.3f} | "
-                f"Precio: ${row['price_yes']:.2f} | "
-                f"Alpha: {row['expected_alpha']:.3f}"
+                f"Precio: ${row['price_yes']:.2f}"
             )
 
     lines.append(f"\n{'='*80}")

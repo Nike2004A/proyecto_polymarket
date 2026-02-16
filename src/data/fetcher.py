@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +10,8 @@ from pathlib import Path
 from tqdm import tqdm
 
 from .client import PolymarketDataClient
+
+logger = logging.getLogger(__name__)
 
 
 class DataFetcher:
@@ -67,7 +70,11 @@ class DataFetcher:
                     book["token_id"] = token_id
                     books.append(book)
                     count += 1
-                except Exception:
+                except Exception as e:
+                    logger.debug(
+                        "Order book fallido para market=%s token=%s: %s",
+                        market.get("id", "?"), token_id, e,
+                    )
                     continue
         self._save_json(books, "order_books.json")
         print(f"  -> {len(books)} order books guardados.")
@@ -93,7 +100,11 @@ class DataFetcher:
                     "history": history,
                 })
                 count += 1
-            except Exception:
+            except Exception as e:
+                logger.debug(
+                    "Price history fallido para market=%s token=%s: %s",
+                    market.get("id", "?"), token_id, e,
+                )
                 continue
         self._save_json(histories, "price_histories.json")
         print(f"  -> {len(histories)} historiales guardados.")
@@ -130,6 +141,11 @@ class DataFetcher:
 
 
 def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
     parser = argparse.ArgumentParser(description="Polymarket Data Fetcher")
     parser.add_argument(
         "--mode",
@@ -137,19 +153,32 @@ def main():
         default="full",
         help="Modo de descarga",
     )
-    parser.add_argument("--output", default="data/raw/", help="Directorio de salida")
-    parser.add_argument("--max-active", type=int, default=2000)
-    parser.add_argument("--max-resolved", type=int, default=5000)
+    parser.add_argument("--output", default=None, help="Directorio de salida")
+    parser.add_argument("--max-active", type=int, default=None)
+    parser.add_argument("--max-resolved", type=int, default=None)
+    parser.add_argument("--config", default="config/config.yaml", help="Ruta a config.yaml")
     args = parser.parse_args()
 
-    fetcher = DataFetcher(output_dir=args.output)
+    # Cargar config como base, CLI args sobrescriben
+    try:
+        from ..config import load_config
+        cfg = load_config(args.config)
+        data_cfg = cfg.get("data", {})
+    except (FileNotFoundError, ImportError):
+        data_cfg = {}
+
+    output_dir = args.output or data_cfg.get("raw_dir", "data/raw/")
+    max_active = args.max_active or data_cfg.get("max_active_markets", 2000)
+    max_resolved = args.max_resolved or data_cfg.get("max_resolved_markets", 5000)
+
+    fetcher = DataFetcher(output_dir=output_dir)
 
     if args.mode == "full":
-        fetcher.fetch_all(max_active=args.max_active, max_resolved=args.max_resolved)
+        fetcher.fetch_all(max_active=max_active, max_resolved=max_resolved)
     elif args.mode == "active":
-        fetcher.fetch_active_markets(max_markets=args.max_active)
+        fetcher.fetch_active_markets(max_markets=max_active)
     elif args.mode == "resolved":
-        fetcher.fetch_resolved_markets(max_markets=args.max_resolved)
+        fetcher.fetch_resolved_markets(max_markets=max_resolved)
     elif args.mode == "tags":
         fetcher.fetch_tags()
 
