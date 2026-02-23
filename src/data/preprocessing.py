@@ -199,6 +199,37 @@ def get_snapshot_price(
     return None
 
 
+def _infer_resolution_from_market(market: dict) -> str:
+    """
+    Infiere la resolución de un mercado a partir de outcomePrices.
+
+    Returns:
+        'yes', 'no', o '' si no se puede determinar.
+    """
+    # Primero intentar campo explícito 'resolution'
+    explicit = str(market.get("resolution", "")).strip().lower()
+    if explicit in ("yes", "no"):
+        return explicit
+
+    # Inferir de outcomePrices: ['1','0'] = Yes, ['0','1'] = No
+    outcome_prices = market.get("outcomePrices", [])
+    if isinstance(outcome_prices, str):
+        try:
+            outcome_prices = json.loads(outcome_prices)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    if isinstance(outcome_prices, list) and len(outcome_prices) >= 2:
+        try:
+            p0, p1 = float(outcome_prices[0]), float(outcome_prices[1])
+            if p0 >= 0.95:
+                return "yes"
+            elif p1 >= 0.95:
+                return "no"
+        except (ValueError, TypeError):
+            pass
+    return ""
+
+
 def compute_label(
     market: dict,
     snapshot_price_yes: float,
@@ -220,7 +251,7 @@ def compute_label(
         0 si no fue rentable
         -1 si resolución ambigua (descartar)
     """
-    resolution = str(market.get("resolution", "")).strip().lower()
+    resolution = _infer_resolution_from_market(market)
     if resolution == "yes":
         # Retorno: (1.0 - precio_compra) / precio_compra
         if snapshot_price_yes > 0:
@@ -238,7 +269,7 @@ def compute_continuous_label(market: dict, snapshot_price_yes: float) -> float |
     Label continua: retorno esperado.
     payout - precio_de_compra
     """
-    resolution = str(market.get("resolution", "")).strip().lower()
+    resolution = _infer_resolution_from_market(market)
     if resolution == "yes":
         return 1.0 - snapshot_price_yes
     elif resolution == "no":
@@ -265,6 +296,23 @@ def preprocess_markets(
     df = compute_time_features(df, reference_time=reference_time)
     df = clean_numeric_columns(df)
     df = compute_derived_features(df)
+
+    # Derivar columna 'resolution' de outcomePrices para mercados resueltos
+    if "outcomePrices" in df.columns:
+        def _infer_resolution(prices):
+            if not isinstance(prices, list) or len(prices) < 2:
+                return None
+            try:
+                p0, p1 = float(prices[0]), float(prices[1])
+            except (ValueError, TypeError):
+                return None
+            if p0 >= 0.95:
+                return "Yes"
+            elif p1 >= 0.95:
+                return "No"
+            return None
+        df["resolution"] = df["outcomePrices"].apply(_infer_resolution)
+
     return df
 
 

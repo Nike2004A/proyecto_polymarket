@@ -122,16 +122,24 @@ class PolymarketDataClient:
     def get_price_history(
         self,
         token_id: str,
-        interval: str = "1d",
+        interval: str = "all",
         fidelity: int = 60,
     ) -> list[dict]:
-        """Historial de precios por token."""
+        """
+        Historial de precios por token.
+
+        Usa el endpoint CLOB (clob.polymarket.com/prices-history).
+        Retorna lista de {t: unix_timestamp, p: price}.
+        """
         params = {
             "market": token_id,
             "interval": interval,
             "fidelity": fidelity,
         }
-        return self._get(f"{DATA_BASE}/prices-history", params)
+        result = self._get(f"{CLOB_BASE}/prices-history", params)
+        if isinstance(result, dict):
+            return result.get("history", [])
+        return result
 
     # ── Utilidades ───────────────────────────────────────────────────
 
