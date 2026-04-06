@@ -34,8 +34,6 @@ _SLUG_PREFIX_MAP: dict[str, str] = {
     "atp": "sports", "wta": "sports", "mls": "sports", "mlb": "sports",
     "nfl": "sports", "nba": "sports", "nhl": "sports", "ufc": "sports",
     "fifa": "sports",
-    # Politics / elections
-    "2024": "politics", "2025": "politics", "2026": "politics",
 }
 
 # Keyword matching sobre question+slug como fallback

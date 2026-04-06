@@ -18,6 +18,8 @@ from sklearn.metrics import (
 )
 
 from .architecture import MarketValueNet
+from ..data.preprocessing import _infer_resolution_from_market
+from ..features.pipeline import FeaturePipeline
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +108,7 @@ def print_evaluation(results: dict) -> None:
 def backtest(
     model: MarketValueNet,
     historical_markets: list[dict],
-    feature_pipeline,
+    feature_pipeline: FeaturePipeline,
     initial_capital: float = 1000.0,
     position_size: float = 0.05,
     threshold: float = 0.6,
@@ -168,7 +170,6 @@ def backtest(
                 shares = bet_amount / price
                 # market.get("resolution") es siempre None en la API.
                 # Inferir de outcomePrices: [1,0] = Yes, [0,1] = No.
-                from ..data.preprocessing import _infer_resolution_from_market
                 resolution = _infer_resolution_from_market(market)
                 payout = shares * (1.0 if resolution == "yes" else 0.0)
                 pnl = payout - bet_amount
@@ -185,7 +186,7 @@ def backtest(
                     "capital_after": capital,
                 })
         except Exception as e:
-            logger.debug(
+            logger.warning(
                 "Backtest: market %s omitido: %s",
                 market.get("id", "?"), e,
             )

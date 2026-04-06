@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 
@@ -19,7 +19,7 @@ class PolymarketDataClient:
         self.session.headers.update({"Accept": "application/json"})
         self.rate_limit_delay = rate_limit_delay
 
-    def _get(self, url: str, params: Optional[dict] = None) -> dict | list:
+    def _get(self, url: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any] | list[Any]:
         resp = self.session.get(url, params=params, timeout=30)
         resp.raise_for_status()
         time.sleep(self.rate_limit_delay)

@@ -97,12 +97,12 @@ def create_dataloaders(
         )
     else:
         if temporal_split:
-            logger.warning(
+            raise ValueError(
                 "temporal_split=True pero no hay timestamps disponibles. "
-                "Usando random split. Para temporal split, regenera features "
-                "con el pipeline actualizado que guarda end_dates.npy."
+                "Regenera features con el pipeline (guarda end_dates.npy) "
+                "o usa temporal_split=False para random split."
             )
-        # Random split (fallback)
+        # Random split
         generator = torch.Generator().manual_seed(42)
         all_indices = torch.randperm(n, generator=generator).tolist()
         train_indices = all_indices[:n_train]

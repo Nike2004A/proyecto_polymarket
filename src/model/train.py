@@ -106,17 +106,14 @@ def train_model(
                 auc = 0.0
             history["val_accuracy"].append(acc)
             history["val_auc"].append(auc)
-            print(
-                f"Epoch {epoch + 1}/{epochs} | "
-                f"Train: {avg_train:.4f} | "
-                f"Val Loss: {avg_val:.4f} | "
-                f"Acc: {acc:.3f} | AUC: {auc:.3f}"
+            logger.info(
+                "Epoch %d/%d | Train: %.4f | Val Loss: %.4f | Acc: %.3f | AUC: %.3f",
+                epoch + 1, epochs, avg_train, avg_val, acc, auc,
             )
         else:
-            print(
-                f"Epoch {epoch + 1}/{epochs} | "
-                f"Train Loss: {avg_train:.4f} | "
-                f"Val Loss: {avg_val:.4f}"
+            logger.info(
+                "Epoch %d/%d | Train Loss: %.4f | Val Loss: %.4f",
+                epoch + 1, epochs, avg_train, avg_val,
             )
 
         # Guardar mejor modelo por AUC (más relevante que val_loss con datos desbalanceados)
@@ -131,8 +128,8 @@ def train_model(
     with open(save_path / "training_history.json", "w") as f:
         json.dump(history, f, indent=2)
 
-    print(f"\nEntrenamiento completado. Mejor val AUC: {best_val_auc:.4f}")
-    print(f"Modelos guardados en {save_path}/")
+    logger.info("Entrenamiento completado. Mejor val AUC: %.4f", best_val_auc)
+    logger.info("Modelos guardados en %s/", save_path)
 
     return history
 
@@ -182,8 +179,9 @@ def main():
     else:
         logger.warning("  No hay timestamps: se usará random split.")
 
+    use_temporal = dataset.timestamps is not None
     train_loader, val_loader = create_dataloaders(
-        dataset, batch_size=batch_size, temporal_split=True
+        dataset, batch_size=batch_size, temporal_split=use_temporal
     )
 
     # Crear modelo

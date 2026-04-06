@@ -180,7 +180,7 @@ def get_snapshot_price(
         except (json.JSONDecodeError, TypeError):
             return None
 
-    if outcome_prices:
+    if isinstance(outcome_prices, list) and outcome_prices:
         price = float(outcome_prices[0])
         # Para mercados resueltos, el precio final está en ~1.0 o ~0.0,
         # lo que NO es un buen snapshot. Solo usar si parece razonable.
@@ -356,7 +356,7 @@ def preprocess_market_dict(
 
     # Precios
     outcome_prices = m.get("outcomePrices", [])
-    if outcome_prices:
+    if isinstance(outcome_prices, list) and outcome_prices:
         m["price_yes"] = float(outcome_prices[0])
         m["price_no"] = float(outcome_prices[1]) if len(outcome_prices) > 1 else 1 - m["price_yes"]
 
