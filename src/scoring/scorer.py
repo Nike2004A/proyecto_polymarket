@@ -1,6 +1,7 @@
 """Scoring de mercados activos con el modelo entrenado."""
 
 import argparse
+import json
 import logging
 from pathlib import Path
 
@@ -78,9 +79,8 @@ def score_active_markets(
             # Precio real del dict (features["numerical"][0] está escalado por el scaler)
             op = market.get("outcomePrices", [])
             if isinstance(op, str):
-                import json as _json
                 try:
-                    op = _json.loads(op)
+                    op = json.loads(op)
                 except (ValueError, TypeError):
                     op = []
             price_yes = float(op[0]) if isinstance(op, list) and op else float(

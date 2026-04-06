@@ -1,5 +1,6 @@
 """Evaluación del modelo y backtesting."""
 
+import json
 import logging
 
 import numpy as np
@@ -153,9 +154,8 @@ def backtest(
                 # Obtener precio real del dict (no el escalado del scaler)
                 op = market.get("outcomePrices", [])
                 if isinstance(op, str):
-                    import json as _json
                     try:
-                        op = _json.loads(op)
+                        op = json.loads(op)
                     except (ValueError, TypeError):
                         op = []
                 price = float(op[0]) if isinstance(op, list) and op else float(
