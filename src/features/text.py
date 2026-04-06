@@ -56,7 +56,7 @@ class DummyTextEncoder:
         return self._embed_dim
 
     def encode(self, text: str) -> np.ndarray:
-        np.random.seed(hash(text) % (2**31))
+        np.random.seed(abs(hash(text)) % (2**31))  # abs: hash() puede ser negativo en Python 3
         return np.random.randn(self._embed_dim).astype(np.float32)
 
     def encode_batch(self, texts: list[str], batch_size: int = 64) -> np.ndarray:

@@ -5,33 +5,96 @@ from pathlib import Path
 
 import numpy as np
 
-# Categorías predefinidas comunes en Polymarket
+# Categorías definidas para Polymarket.
+# El campo events[].tags está vacío en la API — la categoría se infiere del slug.
 DEFAULT_CATEGORIES = [
-    "politics",
-    "crypto",
-    "sports",
-    "entertainment",
-    "science",
-    "economics",
-    "technology",
-    "world",
-    "finance",
-    "elections",
-    "climate",
-    "health",
-    "culture",
-    "business",
-    "legal",
-    "ai",
-    "social-media",
-    "gaming",
-    "other",
-    "unknown",
+    "crypto",       # btc, eth, sol, xrp, bnb, doge, hype, token launches...
+    "esports",      # cs2, lol, dota2, fl1 (League of Legends, Counter-Strike...)
+    "sports",       # atp, wta (tennis), mls, mlb, nfl, nba...
+    "politics",     # elections, presidents, congress, senate...
+    "economics",    # gdp, inflation, fed, interest rates...
+    "technology",   # apple, google, tesla, spacex, ai...
+    "entertainment",# oscars, movies, music...
+    "health",       # medical, fda, disease...
+    "other",        # mercados generales ("will X happen?")
+    "unknown",      # no se pudo inferir
 ]
+
+# Prefijos de slug → categoría. Basado en análisis de 20k mercados resueltos.
+# Esto cubre ~75% de los mercados; el resto cae al keyword matching.
+_SLUG_PREFIX_MAP: dict[str, str] = {
+    # Crypto (tokens y precios)
+    "btc": "crypto", "bitcoin": "crypto", "eth": "crypto", "ethereum": "crypto",
+    "sol": "crypto", "xrp": "crypto", "bnb": "crypto", "doge": "crypto",
+    "hype": "crypto", "highest": "crypto",
+    # Esports
+    "lol": "esports", "cs2": "esports", "dota2": "esports", "fl1": "esports",
+    "valorant": "esports", "rl": "esports",
+    # Sports
+    "atp": "sports", "wta": "sports", "mls": "sports", "mlb": "sports",
+    "nfl": "sports", "nba": "sports", "nhl": "sports", "ufc": "sports",
+    "fifa": "sports",
+    # Politics / elections
+    "2024": "politics", "2025": "politics", "2026": "politics",
+}
+
+# Keyword matching sobre question+slug como fallback
+_KEYWORD_MAP: dict[str, list[str]] = {
+    "politics": [
+        "president", "election", "trump", "biden", "harris", "congress",
+        "senate", "vote", "governor", "mayor", "ballot", "party", "democrat",
+        "republican", "primary", "electoral",
+    ],
+    "crypto": [
+        "bitcoin", "ethereum", "crypto", "btc", "eth", "solana", "token",
+        "blockchain", "defi", "nft", "dao", "stablecoin", "altcoin",
+        "market cap", "fdv", "launch",
+        # Tokens frecuentes que no tienen slug prefix propio
+        "bnb", "xrp", "doge", "hyperliquid", "hype", "plasma", "aster",
+        "zama", "infinex", "trove", "foresee",
+        # Patrones de precio y venta crypto
+        "public sale", "auction clearing", "dip to", "clearing price",
+        "committed to the",
+    ],
+    "sports": [
+        "nba", "nfl", "soccer", "football", "tennis", "mlb", "nhl",
+        "game", "match", "tournament", "championship", "world cup",
+        "olympics", "medal", "season",
+    ],
+    "esports": [
+        "league of legends", "counter-strike", "dota", "valorant",
+        "esport", "gaming tournament",
+    ],
+    "economics": [
+        "gdp", "inflation", "fed", "interest rate", "recession",
+        "unemployment", "cpi", "rate hike", "cut",
+    ],
+    "technology": [
+        "apple", "google", "tesla", "spacex", "ai", "openai", "model",
+        "microsoft", "meta", "launch", "ipo",
+    ],
+    "entertainment": [
+        "oscar", "movie", "album", "grammy", "celebrity", "tv show",
+        "netflix", "box office", "award",
+    ],
+    "health": [
+        "fda", "vaccine", "covid", "cancer", "drug", "clinical", "disease",
+        "hospital", "medical",
+    ],
+}
 
 
 class CategoryEncoder:
-    """Encoder de categorías de mercados a IDs enteros para nn.Embedding."""
+    """
+    Encoder de categorías de mercados a IDs enteros para nn.Embedding.
+
+    Estrategia (en orden de prioridad):
+    1. Prefijo del slug → cubre ~75% de los mercados (esports, crypto, sports)
+    2. Keyword matching sobre question + slug → cubre la mayoría del resto
+    3. Fallback: "unknown"
+
+    NOTA: events[].tags está vacío en la API de Polymarket — no se puede usar.
+    """
 
     def __init__(self, categories: list[str] | None = None):
         self.categories = categories or DEFAULT_CATEGORIES
@@ -49,38 +112,18 @@ class CategoryEncoder:
 
     def encode(self, market: dict) -> int:
         """Devuelve el ID de categoría para un mercado."""
-        tags = market.get("tags", [])
-        if isinstance(tags, str):
-            try:
-                tags = json.loads(tags)
-            except (json.JSONDecodeError, TypeError):
-                tags = []
-
-        # Buscar la primera etiqueta que coincida
-        if isinstance(tags, list):
-            for tag in tags:
-                tag_label = tag.get("label", tag) if isinstance(tag, dict) else str(tag)
-                tag_lower = tag_label.lower().strip()
-                if tag_lower in self.cat_to_id:
-                    return self.cat_to_id[tag_lower]
-
-        # Intentar con el slug o la pregunta para inferir categoría
+        slug = market.get("slug", "").lower().strip()
         question = market.get("question", "").lower()
-        slug = market.get("slug", "").lower()
+
+        # 1. Prefijo del slug (más preciso para esports, crypto, sports)
+        slug_prefix = slug.split("-")[0] if slug else ""
+        if slug_prefix in _SLUG_PREFIX_MAP:
+            cat = _SLUG_PREFIX_MAP[slug_prefix]
+            return self.cat_to_id.get(cat, self.unknown_id)
+
+        # 2. Keyword matching sobre question + slug
         text = f"{question} {slug}"
-
-        keyword_map = {
-            "politics": ["president", "election", "trump", "biden", "congress", "senate", "vote"],
-            "crypto": ["bitcoin", "ethereum", "crypto", "btc", "eth", "solana", "token"],
-            "sports": ["nba", "nfl", "soccer", "football", "tennis", "mlb", "game", "match"],
-            "entertainment": ["oscar", "movie", "album", "grammy", "celebrity", "tv show"],
-            "economics": ["gdp", "inflation", "fed", "interest rate", "recession"],
-            "technology": ["apple", "google", "tesla", "ai", "spacex", "launch"],
-            "finance": ["stock", "s&p", "dow", "nasdaq", "market cap"],
-            "elections": ["primary", "electoral", "governor", "mayor", "ballot"],
-        }
-
-        for category, keywords in keyword_map.items():
+        for category, keywords in _KEYWORD_MAP.items():
             if any(kw in text for kw in keywords):
                 return self.cat_to_id.get(category, self.unknown_id)
 

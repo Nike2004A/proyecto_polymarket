@@ -106,7 +106,7 @@ class FeaturePipeline:
                 se usan para calcular bid_depth, ask_depth, book_imbalance.
 
         Returns:
-            Dict con keys: numerical (N, 14), category_ids (N,),
+            Dict con keys: numerical (N, 22), category_ids (N,),
             text_embeddings (N, 384).
         """
         from ..data.preprocessing import preprocess_market_dict
@@ -120,19 +120,34 @@ class FeaturePipeline:
             markets_df, price_histories, order_books
         )
 
-        # Log de features que quedaron en cero (posible dato faltante)
+        # Log de features TS que quedaron en cero (probable falta de price_histories)
+        ts_features = {
+            "price_momentum_7d", "price_momentum_14d", "price_momentum_30d",
+            "price_volatility_7d", "price_volatility_30d",
+            "price_trend_slope", "ewm_momentum", "ts_coverage", "ts_days_span",
+        }
+        ob_features = {"bid_depth", "ask_depth", "book_imbalance"}
         zero_cols = (numerical == 0).all(axis=0)
-        for i, is_zero in enumerate(zero_cols):
-            if is_zero and NUMERICAL_FEATURE_NAMES[i] in (
-                "price_momentum_7d", "price_volatility_7d",
-                "bid_depth", "ask_depth", "book_imbalance",
-            ):
-                source = "price_histories" if "momentum" in NUMERICAL_FEATURE_NAMES[i] or "volatility" in NUMERICAL_FEATURE_NAMES[i] else "order_books"
-                logger.warning(
-                    "Feature '%s' es cero para todos los mercados. "
-                    "Verifica que se está pasando '%s' al pipeline.",
-                    NUMERICAL_FEATURE_NAMES[i], source,
-                )
+        ts_all_zero = [
+            NUMERICAL_FEATURE_NAMES[i] for i, z in enumerate(zero_cols)
+            if z and NUMERICAL_FEATURE_NAMES[i] in ts_features
+        ]
+        ob_all_zero = [
+            NUMERICAL_FEATURE_NAMES[i] for i, z in enumerate(zero_cols)
+            if z and NUMERICAL_FEATURE_NAMES[i] in ob_features
+        ]
+        if ts_all_zero:
+            logger.warning(
+                "Features TS en cero para TODOS los mercados: %s. "
+                "Verifica que price_histories incluye los mercados resueltos.",
+                ts_all_zero,
+            )
+        if ob_all_zero:
+            logger.warning(
+                "Features de order book en cero para TODOS los mercados: %s. "
+                "order_books solo existe para mercados activos (esperado para resolved).",
+                ob_all_zero,
+            )
 
         # Fit scaler
         self.scaler.fit(numerical)
@@ -216,7 +231,11 @@ class FeaturePipeline:
 
 def _load_auxiliary_data(input_dir: Path) -> tuple[dict, dict]:
     """
-    Carga price_histories y order_books desde disco y los indexa por market_id.
+    Carga price_histories y order_books desde disco.
+
+    Ambos archivos usan formato dict keyed por market_id:
+        price_histories.json: {market_id: [{t, p}, ...]}
+        order_books.json:     {market_id: {bids: [...], asks: [...]}}
 
     Returns:
         (price_histories_by_id, order_books_by_id)
@@ -227,11 +246,9 @@ def _load_auxiliary_data(input_dir: Path) -> tuple[dict, dict]:
     ph_path = input_dir / "price_histories.json"
     if ph_path.exists():
         with open(ph_path) as f:
-            raw_histories = json.load(f)
-        for entry in raw_histories:
-            mid = entry.get("market_id", "")
-            if mid:
-                price_histories[mid] = entry.get("history", [])
+            price_histories = json.load(f)
+        # Asegurar que los valores son listas (filtra entradas vacías/None)
+        price_histories = {k: v for k, v in price_histories.items() if isinstance(v, list)}
         logger.info("Cargados %d price histories.", len(price_histories))
     else:
         logger.warning(
@@ -242,11 +259,10 @@ def _load_auxiliary_data(input_dir: Path) -> tuple[dict, dict]:
     ob_path = input_dir / "order_books.json"
     if ob_path.exists():
         with open(ob_path) as f:
-            raw_books = json.load(f)
-        for entry in raw_books:
-            mid = entry.get("market_id", "")
-            if mid:
-                order_books[mid] = entry
+            order_books = json.load(f)
+        if not isinstance(order_books, dict):
+            logger.warning("order_books.json no tiene formato dict. Ignorando.")
+            order_books = {}
         logger.info("Cargados %d order books.", len(order_books))
     else:
         logger.warning(
