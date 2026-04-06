@@ -1,0 +1,31 @@
+{
+  "fitted": true,
+  "num_numerical": 23,
+  "num_categories": 10,
+  "text_embed_dim": 384,
+  "feature_names": [
+    "price_yes",
+    "price_no",
+    "spread",
+    "volume_24h",
+    "volume_total",
+    "liquidity",
+    "volume_liquidity_ratio",
+    "days_to_resolution",
+    "market_age_days",
+    "price_momentum_7d",
+    "price_volatility_7d",
+    "price_momentum_14d",
+    "price_momentum_30d",
+    "price_volatility_30d",
+    "price_trend_slope",
+    "ewm_momentum",
+    "ts_coverage",
+    "ts_days_span",
+    "bid_depth",
+    "ask_depth",
+    "book_imbalance",
+    "price_at_halflife",
+    "neg_risk"
+  ]
+}

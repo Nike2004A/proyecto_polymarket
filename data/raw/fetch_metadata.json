@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-04-06T13:25:44.472751",
+  "active_count": 900,
+  "resolved_count": 24000,
+  "books_count": 900,
+  "histories_total": 24900,
+  "histories_with_data": 24900,
+  "resolved_histories_coverage_pct": 100.0,
+  "active_histories_coverage_pct": 100.0,
+  "union_unique_ids": 24900,
+  "tags_count": 100,
+  "note": "Fixed clean datasets: 900 active (all with history+book), 24k resolved (all with history). Zero overlap. Union=24900."
+}
