@@ -168,6 +168,29 @@ def get_snapshot_price(
 
                     if best_price is not None and 0 < best_price < 1:
                         return best_price
+
+                    # Fallback adaptivo: mercados de vida corta (<7 días).
+                    # Usar el último punto antes del endDate con precio no extremo.
+                    fallback_price = None
+                    fallback_time = None
+                    for point in history:
+                        t = point.get("t", point.get("timestamp", 0))
+                        p = point.get("p", point.get("price", 0))
+                        try:
+                            if isinstance(t, (int, float)):
+                                point_time = pd.to_datetime(t, unit="s", utc=True)
+                            else:
+                                point_time = pd.to_datetime(t, utc=True)
+                            price_val = float(p)
+                            if point_time < end_date and 0 < price_val < 1:
+                                if fallback_time is None or point_time > fallback_time:
+                                    fallback_time = point_time
+                                    fallback_price = price_val
+                        except (ValueError, TypeError):
+                            continue
+
+                    if fallback_price is not None:
+                        return fallback_price
                 except (ValueError, TypeError):
                     pass
 
