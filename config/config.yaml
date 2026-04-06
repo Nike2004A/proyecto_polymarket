@@ -25,7 +25,15 @@ features:
   numerical_features: 23
   text_model: "all-MiniLM-L6-v2"
   text_embed_dim: 384
-  use_dummy_text: false  # Set to true for testing without sentence-transformers
+  use_dummy_text: false       # Set to true for testing without sentence-transformers
+  snapshot_offset_days: 7    # Días antes del endDate para el snapshot anti-leakage (baseline)
+
+# Time-series dataset (segundo modelo)
+ts_data:
+  processed_dir: "data/processed_ts"
+  seq_len: 64
+  min_points: 5
+  snapshot_offset_days: 7    # Días antes del endDate para el cutoff TS (GRU)
 
 # Model hyperparameters
 model:
@@ -34,6 +42,12 @@ model:
   category_embed_dim: 8
   hidden_dims: [256, 128, 64]
   dropout: 0.3
+
+ts_model:
+  input_dim: 3
+  hidden_dim: 64
+  num_layers: 1
+  dropout: 0.2
 
 # Training
 training:
@@ -44,6 +58,14 @@ training:
   weight_decay: 0.0001
   use_weighted_sampler: true
   save_dir: "data/models"
+
+ts_training:
+  epochs: 50
+  learning_rate: 0.001
+  batch_size: 64
+  patience: 5
+  seed: 42
+  save_dir: "data/models/ts_gru"
 
 # Scoring & Signals
 scoring:

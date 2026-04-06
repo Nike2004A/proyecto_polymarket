@@ -11,6 +11,34 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+def get_market_end_time(market: dict) -> pd.Timestamp | None:
+    """Parsea el endDate de un mercado como timestamp UTC."""
+    end_date_str = market.get("endDate", "")
+    if not end_date_str:
+        return None
+
+    try:
+        return pd.to_datetime(end_date_str, utc=True)
+    except (ValueError, TypeError):
+        return None
+
+
+def get_snapshot_cutoff_time(
+    market: dict,
+    snapshot_offset_days: int = 7,
+) -> pd.Timestamp | None:
+    """
+    Retorna el cutoff temporal exacto del snapshot anti-leakage.
+
+    El cutoff es el endDate menos `snapshot_offset_days`, y se usa como
+    frontera común para construir snapshots y secuencias pre-resolución.
+    """
+    end_time = get_market_end_time(market)
+    if end_time is None:
+        return None
+    return end_time - pd.Timedelta(days=snapshot_offset_days)
+
+
 def load_raw_markets(filepath: str) -> pd.DataFrame:
     """Carga mercados crudos desde JSON y devuelve un DataFrame."""
     path = Path(filepath)
@@ -141,11 +169,13 @@ def get_snapshot_price(
     if price_histories and market_id in price_histories:
         history = price_histories[market_id]
         if isinstance(history, list) and len(history) > 0:
-            end_date_str = market.get("endDate", "")
-            if end_date_str:
+            end_date = get_market_end_time(market)
+            snapshot_time = get_snapshot_cutoff_time(
+                market,
+                snapshot_offset_days=snapshot_offset_days,
+            )
+            if end_date is not None and snapshot_time is not None:
                 try:
-                    end_date = pd.to_datetime(end_date_str, utc=True)
-                    snapshot_time = end_date - pd.Timedelta(days=snapshot_offset_days)
 
                     # Buscar el precio más cercano al snapshot_time
                     best_price = None
@@ -253,7 +283,7 @@ def build_snapshot_market(
     return market_snapshot, float(snapshot_price)
 
 
-def _infer_resolution_from_market(market: dict) -> str:
+def infer_resolution_from_market(market: dict) -> str:
     """
     Infiere la resolución de un mercado a partir de outcomePrices.
 
@@ -305,7 +335,7 @@ def compute_label(
         0 si no fue rentable
         -1 si resolución ambigua (descartar)
     """
-    resolution = _infer_resolution_from_market(market)
+    resolution = infer_resolution_from_market(market)
     if resolution == "yes":
         # Retorno: (1.0 - precio_compra) / precio_compra
         if snapshot_price_yes > 0:
@@ -323,7 +353,7 @@ def compute_continuous_label(market: dict, snapshot_price_yes: float) -> float |
     Label continua: retorno esperado.
     payout - precio_de_compra
     """
-    resolution = _infer_resolution_from_market(market)
+    resolution = infer_resolution_from_market(market)
     if resolution == "yes":
         return 1.0 - snapshot_price_yes
     elif resolution == "no":

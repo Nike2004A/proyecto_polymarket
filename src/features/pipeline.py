@@ -300,6 +300,8 @@ def run_pipeline(input_dir: str = "data/raw", output_dir: str = "data/processed"
         args.input = cfg.get("data", {}).get("raw_dir", args.input)
         args.output = cfg.get("data", {}).get("processed_dir", args.output)
         args.dummy_text = cfg.get("features", {}).get("use_dummy_text", args.dummy_text)
+        if args.snapshot_offset == 7:  # solo sobreescribir si no fue pasado explícitamente
+            args.snapshot_offset = cfg.get("features", {}).get("snapshot_offset_days", 7)
 
     from ..data.preprocessing import build_snapshot_market, compute_label
 

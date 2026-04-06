@@ -22,17 +22,19 @@ Sistema end-to-end en Python que consume la API de Polymarket, extrae features d
 │  │             │    │              │    │                        │  │
 │  │ - Gamma API │    │ - Precio     │    │ - MarketValueNet       │  │
 │  │ - CLOB API  │    │ - Volumen    │    │   (Wide & Deep)        │  │
-│  │             │    │ - Liquidez   │    │                        │  │
-│  └─────────────┘    │ - Momentum   │    │ - Entrenamiento con    │  │
-│                     │ - Categoría  │    │   mercados resueltos   │  │
-│                     │ - Spread     │    │   (labels reales)      │  │
-│                     │ - Text Emb.  │    └───────────┬────────────┘  │
+│  │             │    │ - Liquidez   │    │ - PriceSequenceGRU     │  │
+│  └─────────────┘    │ - Momentum   │    │   (TS puro)            │  │
+│                     │ - Categoría  │    │ - Entrenamiento con    │  │
+│                     │ - Spread     │    │   mercados resueltos   │  │
+│                     │ - Text Emb.  │    │   (labels reales)      │  │
+│                     │ - TS seq.    │    └───────────┬────────────┘  │
 │                     └──────────────┘                │               │
 │                     ┌───────────────────────────────▼────────────┐  │
 │                     │         SCORING & OUTPUT                    │  │
 │                     │                                            │  │
-│                     │ - Ranking de mercados por model score      │  │
+│                     │ - Ranking baseline y TS por model score    │  │
 │                     │ - Señales: STRONG BUY / BUY / HOLD        │  │
+│                     │ - Comparación explícita entre modelos      │  │
 │                     │ - Jupyter Notebooks con visualizaciones    │  │
 │                     └────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────┘
@@ -53,22 +55,33 @@ polymarket-ml-analyzer/
 │   │   ├── numerical.py           # 23 features numéricas
 │   │   ├── categorical.py         # CategoryEncoder — 10 categorías via slug/keyword
 │   │   ├── text.py                # Sentence Transformers embeddings (MiniLM-L6)
-│   │   └── pipeline.py            # FeaturePipeline: raw markets -> .npy tensors
+│   │   ├── pipeline.py            # FeaturePipeline: raw markets -> .npy tensors
+│   │   ├── ts_sequence.py         # Builder de secuencias pre-snapshot
+│   │   └── ts_pipeline.py         # Pipeline TS: raw markets -> data/processed_ts/
 │   ├── model/
 │   │   ├── architecture.py        # MarketValueNet (Wide & Deep)
 │   │   ├── dataset.py             # PolymarketDataset + temporal DataLoaders
 │   │   ├── train.py               # Training loop (AdamW + CosineAnnealing)
-│   │   └── evaluate.py            # Métricas, confusion matrix, backtesting
+│   │   ├── evaluate.py            # Métricas, confusion matrix, backtesting
+│   │   ├── ts_architecture.py     # PriceSequenceGRU
+│   │   ├── ts_dataset.py          # Dataset TS + temporal DataLoaders
+│   │   ├── ts_train.py            # Entrenamiento reproducible con early stopping
+│   │   └── ts_evaluate.py         # Métricas del modelo TS
 │   └── scoring/
 │       ├── scorer.py              # Scoring de mercados activos
-│       └── signals.py             # Generación de señales de compra
+│       ├── signals.py             # Generación de señales de compra
+│       └── ts_scorer.py           # Scoring live/resuelto para PriceSequenceGRU
 ├── notebooks/
 │   ├── 00_playground.ipynb             # Sandbox / exploración libre
 │   ├── 01_data_exploration.ipynb       # EDA completo — 18 secciones
 │   ├── 02_feature_engineering.ipynb    # Construcción y análisis de features
 │   ├── 03_processed_dataset_eda.ipynb  # EDA sobre el dataset procesado (.npy)
+│   ├── 03_1_ts_dataset_validation.ipynb# Validación del dataset TS
 │   ├── 04_model_training.ipynb         # Entrenamiento, curvas, confusion matrix, ROC
-│   └── 05_live_scoring.ipynb           # Scoring en vivo, señales, dashboard, backtesting
+│   ├── 04_1_ts_model_training.ipynb    # Entrenamiento del GRU sobre secuencias
+│   ├── 05_live_scoring.ipynb           # Scoring en vivo, señales, dashboard, backtesting
+│   ├── 05_1_ts_live_scoring.ipynb      # Scoring en vivo con PriceSequenceGRU
+│   └── 05_2_model_comparison.ipynb     # Comparación baseline vs GRU
 ├── data/
 │   ├── raw/                       # Datos crudos de la API (JSON)
 │   │   ├── active_markets.json    #   900 activos (todos con historial + order book)
@@ -77,7 +90,9 @@ polymarket-ml-analyzer/
 │   │   ├── order_books.json       #   900 order books (uno por activo)
 │   │   └── fetch_metadata.json    #   Stats del último fetch
 │   ├── processed/                 # Features procesadas (.npy) — generadas por el pipeline
+│   ├── processed_ts/              # Secuencias procesadas para PriceSequenceGRU
 │   └── models/                    # Checkpoints del modelo (.pt)
+│       └── ts_gru/                # Checkpoints del segundo modelo TS
 ├── figures/                       # Gráficas exportadas desde notebooks
 ├── requirements.txt
 └── setup.py
@@ -121,11 +136,20 @@ python -m src.data.fetcher --mode histories
 # 2. Generar features (produce data/processed/*.npy)
 python -m src.features.pipeline
 
-# 3. Entrenar modelo
+# 3. Construir dataset TS (produce data/processed_ts/*.npy)
+python -m src.features.ts_pipeline
+
+# 4. Entrenar modelo baseline
 python -m src.model.train --data-dir data/processed --epochs 50 --batch-size 64
 
-# 4. Scoring de mercados activos (top 20 oportunidades)
+# 5. Entrenar modelo TS
+python -m src.model.ts_train --data-dir data/processed_ts --epochs 50 --batch-size 64
+
+# 6. Scoring de mercados activos (top 20 oportunidades)
 python -m src.scoring.scorer --top 20
+
+# 7. Scoring TS en paralelo
+python -m src.scoring.ts_scorer --top 20
 ```
 
 ### Ejecucion via Notebooks
@@ -140,8 +164,12 @@ Los notebooks están diseñados para ejecutarse en orden:
 2. **01_data_exploration** — EDA completo (18 secciones): calidad temporal, calibración, favorite-longshot bias, trayectorias, análisis temporal, separabilidad de features
 3. **02_feature_engineering** — Construcción de features, correlaciones, distribución por clase
 4. **03_processed_dataset_eda** — EDA sobre el dataset procesado (.npy)
-5. **04_model_training** — Entrenamiento, curvas de loss/AUC, confusion matrix, ROC
-6. **05_live_scoring** — Scoring en vivo, señales de compra, dashboard, backtesting
+5. **03_1_ts_dataset_validation** — Validación del dataset temporal y cobertura de secuencias
+6. **04_model_training** — Entrenamiento, curvas de loss/AUC, confusion matrix, ROC
+7. **04_1_ts_model_training** — Entrenamiento del GRU, métricas y early stopping
+8. **05_live_scoring** — Scoring en vivo, señales de compra, dashboard, backtesting
+9. **05_1_ts_live_scoring** — Scoring en vivo y backtest-style del segundo modelo TS
+10. **05_2_model_comparison** — Comparación explícita baseline vs PriceSequenceGRU
 
 ## Dataset procesado
 
@@ -157,6 +185,22 @@ El pipeline de features produce los siguientes archivos en `data/processed/`:
 | `pipeline/` | — | Scaler + encoders serializados |
 
 De los 24,000 mercados resueltos descargados, 22,478 producen features válidas (93.7%). Los 1,522 descartados son: 834 sin snapshot anti-leakage válido + 688 con resolución ambigua.
+
+## Dataset temporal: `data/processed_ts/`
+
+El pipeline TS produce los siguientes artefactos en `data/processed_ts/`:
+
+| Archivo | Shape | Descripción |
+|---|---|---|
+| `sequences.npy` | (N, 64, 3) | Secuencias left-padded con `price_yes`, `delta_price`, `delta_time_scaled` |
+| `sequence_lengths.npy` | (N,) | Longitud real de cada secuencia |
+| `labels.npy` | (N,) | Misma definición de label del baseline |
+| `end_dates.npy` | (N,) | Timestamps para split temporal |
+| `market_ids.npy` | (N,) | IDs de mercado para comparación |
+| `snapshot_prices.npy` | (N,) | Último precio válido dentro del cutoff TS |
+| `metadata.json` | — | Configuración del pipeline TS y stats de retención |
+
+Este dataset usa solo puntos `t <= snapshot_time`, con `snapshot_time = endDate - 7 días`, secuencias de hasta 64 observaciones y un mínimo de 5 puntos válidos por mercado.
 
 ## Modelo: MarketValueNet
 
@@ -209,6 +253,30 @@ Para cada mercado resuelto se extrae el precio en un **snapshot anti-leakage**:
 | **STRONG BUY** | Score >= 0.75, buena liquidez |
 | **BUY** | Score >= 0.60 |
 | **HOLD** | No cumple filtros de calidad o score bajo |
+
+## Segundo modelo: `PriceSequenceGRU`
+
+El proyecto incluye una segunda familia de modelo, separada del baseline:
+
+- **Tipo**: clasificador puro de series de tiempo
+- **Entrada**: secuencia `(64, 3)` con `price_yes`, `delta_price`, `delta_time_scaled`
+- **Encoder**: `GRU` unidireccional (`hidden_dim=64`, `num_layers=1`)
+- **Head**: `64 -> 32 -> 1` con `dropout=0.2`
+- **Salida**: `sigmoid` para score de clasificación
+
+Este modelo **no reemplaza** a `MarketValueNet`. Su propósito es:
+
+1. capturar la trayectoria completa del precio antes del snapshot
+2. compararse explícitamente contra el baseline actual
+3. habilitar un flujo paralelo de entrenamiento, live scoring y comparación
+
+### ¿Por qué mantenerlo puro TS?
+
+`PriceSequenceGRU` se mantiene **sin features tabulares, texto ni categoría** para que:
+
+- la comparación contra `MarketValueNet` sea limpia
+- el valor incremental de la trayectoria temporal sea medible
+- el live scoring del segundo modelo siga siendo portable y simple: solo requiere `price_histories`
 
 ## Hallazgos del EDA
 
