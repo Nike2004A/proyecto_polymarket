@@ -309,6 +309,48 @@ No se requiere autenticacion. Rate limit: 0.2 s entre llamadas.
 | Order books | 900 | uno por mercado activo |
 | **Training set** | **22,478** | resueltos con snapshot válido + label claro |
 
+## Hiperparámetros clave
+
+### `snapshot_offset_days` — anti-leakage temporal
+
+Controla cuántos días antes del `endDate` se toma el snapshot de precio que define el label de entrenamiento. Es el parámetro de diseño más crítico del pipeline.
+
+| Config key | Modelo | Default | Dónde se usa |
+|---|---|---|---|
+| `features.snapshot_offset_days` | MarketValueNet (baseline) | 7 | `src/features/pipeline.py`, label computation |
+| `ts_data.snapshot_offset_days` | PriceSequenceGRU | 7 | `src/features/ts_pipeline.py`, sequence truncation |
+
+**Semántica**: un valor de 7 significa que se simula haber comprado 7 días antes de la resolución, cuando el outcome todavía era incierto. El modelo aprende a predecir si ese precio era una oportunidad.
+
+**Trade-off tamaño vs. pureza**:
+
+| `snapshot_offset_days` | Efecto en baseline | Efecto en GRU |
+|---|---|---|
+| **14** | Más conservador, snapshot más temprano | Más secuencias truncadas, dataset más pequeño |
+| **7** (default) | Balance razonable — 22,478 muestras | Equilibrio entre cobertura y anti-leakage |
+| **3** | Snapshot más cercano a resolución | Más mercados con secuencias válidas, mayor riesgo de leakage |
+| **0** | Usa precio final (leakage total) | No recomendado |
+
+> **Nota GRU**: el cutoff en el GRU es **estricto** — solo se usan puntos de precio con `t ≤ endDate − offset`. No hay fallback adaptivo. Un valor más bajo aumenta el dataset TS pero reduce el margen de anti-leakage.
+
+> **Nota baseline**: el pipeline de features usa un fallback adaptivo para mercados de vida corta. El `snapshot_offset_days` define el target primario; para mercados que vivieron menos que el offset, se usa el último precio disponible antes del `endDate` con `0 < precio < 1`.
+
+**Para cambiar el offset**:
+```yaml
+# config/config.yaml
+features:
+  snapshot_offset_days: 7    # baseline Wide & Deep
+
+ts_data:
+  snapshot_offset_days: 7    # GRU — afecta tamaño del dataset TS
+```
+
+O desde CLI:
+```bash
+python -m src.features.pipeline --snapshot-offset 14
+python -m src.features.ts_pipeline --snapshot-offset-days 14
+```
+
 ## Disclaimer
 
 Este proyecto es con fines educativos y de investigacion. Trading en mercados de prediccion conlleva riesgo financiero. El modelo no garantiza ganancias. Siempre haz tu propia investigacion antes de tomar decisiones financieras.

@@ -25,6 +25,7 @@ def build_ts_dataset(
     seq_len: int = 64,
     min_points: int = 5,
     snapshot_offset_days: int = 7,
+    use_adaptive_cutoff: bool = True,
     limit: int | None = None,
 ) -> tuple[dict[str, np.ndarray], dict]:
     """Construye el dataset TS completo a partir de mercados resueltos."""
@@ -49,6 +50,7 @@ def build_ts_dataset(
             snapshot_offset_days=snapshot_offset_days,
             seq_len=seq_len,
             min_points=min_points,
+            use_adaptive_cutoff=use_adaptive_cutoff,
         )
         if sequence is None or length is None or snapshot_price is None:
             skipped["no_sequence"] += 1
@@ -89,6 +91,7 @@ def build_ts_dataset(
         "num_features": len(SEQUENCE_FEATURE_NAMES),
         "feature_names": SEQUENCE_FEATURE_NAMES,
         "snapshot_offset_days": int(snapshot_offset_days),
+        "adaptive_cutoff": bool(use_adaptive_cutoff),
         "skipped": skipped,
         "retention_rate": float(len(sequences) / len(source_markets)),
     }
@@ -136,6 +139,10 @@ def main() -> None:
     parser.add_argument("--seq-len", type=int, default=None)
     parser.add_argument("--min-points", type=int, default=None)
     parser.add_argument("--snapshot-offset-days", type=int, default=None)
+    parser.add_argument(
+        "--no-adaptive-cutoff", action="store_true",
+        help="Desactivar fallback adaptivo para mercados de vida corta",
+    )
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
 
@@ -153,14 +160,18 @@ def main() -> None:
     snapshot_offset_days = _get(
         args.snapshot_offset_days, ts_cfg.get("snapshot_offset_days"), 7
     )
+    # --no-adaptive-cutoff toma precedencia; si no se pasa, leer config (default True)
+    use_adaptive_cutoff = not args.no_adaptive_cutoff and ts_cfg.get("adaptive_cutoff", True)
 
     logger.info(
-        "Construyendo dataset TS desde %s -> %s (seq_len=%d, min_points=%d, snapshot_offset=%d)",
+        "Construyendo dataset TS desde %s -> %s "
+        "(seq_len=%d, min_points=%d, snapshot_offset=%d, adaptive_cutoff=%s)",
         input_dir,
         output_dir,
         seq_len,
         min_points,
         snapshot_offset_days,
+        use_adaptive_cutoff,
     )
 
     resolved_markets, price_histories = _load_raw_inputs(input_dir)
@@ -170,6 +181,7 @@ def main() -> None:
         seq_len=seq_len,
         min_points=min_points,
         snapshot_offset_days=snapshot_offset_days,
+        use_adaptive_cutoff=use_adaptive_cutoff,
         limit=args.limit,
     )
     save_ts_dataset(dataset, metadata, output_dir)

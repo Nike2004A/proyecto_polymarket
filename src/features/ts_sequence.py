@@ -110,12 +110,24 @@ def build_market_price_sequence(
     snapshot_offset_days: int = 7,
     seq_len: int = 64,
     min_points: int = 5,
+    use_adaptive_cutoff: bool = True,
 ) -> tuple[np.ndarray | None, int | None, float | None, pd.Timestamp | None]:
     """
     Construye la secuencia temporal de un mercado resuelto usando el cutoff TS.
+
+    Si `use_adaptive_cutoff=True` y no hay suficientes puntos antes del cutoff
+    primario (endDate - offset), se intenta un fallback usando todos los puntos
+    disponibles antes del endDate. Esto recupera mercados de vida corta (<offset días)
+    que tienen historia válida, análogo al fallback adaptivo del pipeline baseline.
     """
+    from ..data.preprocessing import get_market_end_time
+
     market_id = str(market.get("id", ""))
     history = (price_histories or {}).get(market_id)
+    end_time = get_market_end_time(market)
+    if end_time is None:
+        return None, None, None, None
+
     cutoff_time = get_snapshot_cutoff_time(
         market,
         snapshot_offset_days=snapshot_offset_days,
@@ -129,6 +141,17 @@ def build_market_price_sequence(
         seq_len=seq_len,
         min_points=min_points,
     )
+
+    # Fallback adaptivo: mercados de vida corta (<offset días) que no tienen
+    # puntos antes del cutoff primario pero sí tienen ≥min_points antes del endDate.
+    if sequence is None and use_adaptive_cutoff:
+        sequence, length, snapshot_price = build_price_sequence(
+            history,
+            cutoff_time=end_time,
+            seq_len=seq_len,
+            min_points=min_points,
+        )
+
     return sequence, length, snapshot_price, cutoff_time
 
 

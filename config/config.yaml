@@ -27,6 +27,7 @@ features:
   text_embed_dim: 384
   use_dummy_text: false       # Set to true for testing without sentence-transformers
   snapshot_offset_days: 7    # Días antes del endDate para el snapshot anti-leakage (baseline)
+  adaptive_cutoff: true      # Fallback adaptivo para mercados de vida < offset días
 
 # Time-series dataset (segundo modelo)
 ts_data:
@@ -34,6 +35,7 @@ ts_data:
   seq_len: 64
   min_points: 5
   snapshot_offset_days: 7    # Días antes del endDate para el cutoff TS (GRU)
+  adaptive_cutoff: true      # Fallback adaptivo para mercados de vida < offset días (igual que baseline)
 
 # Model hyperparameters
 model:

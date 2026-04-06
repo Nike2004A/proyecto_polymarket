@@ -117,6 +117,7 @@ def backtest(
     position_size: float = 0.05,
     threshold: float = 0.6,
     snapshot_offset_days: int = 7,
+    use_adaptive_cutoff: bool = True,
     device: str | None = None,
 ) -> tuple[pd.DataFrame, float]:
     """
@@ -158,6 +159,7 @@ def backtest(
                 market,
                 price_histories=price_histories,
                 snapshot_offset_days=snapshot_offset_days,
+                use_adaptive_cutoff=use_adaptive_cutoff,
             )
             if snapshot_market is None or snapshot_price is None:
                 continue

@@ -290,9 +290,14 @@ def run_pipeline(input_dir: str = "data/raw", output_dir: str = "data/processed"
         "--snapshot-offset", type=int, default=7,
         help="Días antes de resolución para tomar snapshot de precio (default: 7)",
     )
+    parser.add_argument(
+        "--no-adaptive-cutoff", action="store_true",
+        help="Desactivar fallback adaptivo para mercados de vida corta",
+    )
     parser.add_argument("--config", default=None, help="Ruta a config.yaml")
     args = parser.parse_args()
 
+    use_adaptive_cutoff = True  # default
     # Cargar config si se proporciona
     if args.config:
         from ..config import load_config
@@ -302,6 +307,10 @@ def run_pipeline(input_dir: str = "data/raw", output_dir: str = "data/processed"
         args.dummy_text = cfg.get("features", {}).get("use_dummy_text", args.dummy_text)
         if args.snapshot_offset == 7:  # solo sobreescribir si no fue pasado explícitamente
             args.snapshot_offset = cfg.get("features", {}).get("snapshot_offset_days", 7)
+        use_adaptive_cutoff = cfg.get("features", {}).get("adaptive_cutoff", True)
+    # CLI flag toma precedencia sobre config
+    if args.no_adaptive_cutoff:
+        use_adaptive_cutoff = False
 
     from ..data.preprocessing import build_snapshot_market, compute_label
 
@@ -331,6 +340,7 @@ def run_pipeline(input_dir: str = "data/raw", output_dir: str = "data/processed"
             m,
             price_histories=price_histories,
             snapshot_offset_days=args.snapshot_offset,
+            use_adaptive_cutoff=use_adaptive_cutoff,
         )
 
         if snapshot_market is None or snapshot_price is None:

@@ -148,6 +148,7 @@ def get_snapshot_price(
     market: dict,
     price_histories: dict | None = None,
     snapshot_offset_days: int = 7,
+    use_adaptive_cutoff: bool = True,
 ) -> float | None:
     """
     Obtiene el precio "Yes" en un snapshot temporal anterior a la resolución.
@@ -219,7 +220,7 @@ def get_snapshot_price(
                         except (ValueError, TypeError):
                             continue
 
-                    if fallback_price is not None:
+                    if use_adaptive_cutoff and fallback_price is not None:
                         return fallback_price
                 except (ValueError, TypeError):
                     pass
@@ -263,6 +264,7 @@ def build_snapshot_market(
     market: dict,
     price_histories: dict | None = None,
     snapshot_offset_days: int = 7,
+    use_adaptive_cutoff: bool = True,
 ) -> tuple[dict | None, float | None]:
     """
     Construye una copia del mercado con outcomePrices reemplazado por el snapshot.
@@ -274,6 +276,7 @@ def build_snapshot_market(
         market,
         price_histories=price_histories,
         snapshot_offset_days=snapshot_offset_days,
+        use_adaptive_cutoff=use_adaptive_cutoff,
     )
     if snapshot_price is None:
         return None, None

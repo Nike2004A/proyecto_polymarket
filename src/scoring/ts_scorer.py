@@ -162,6 +162,7 @@ def score_resolved_markets_ts(
     snapshot_offset_days: int = 7,
     seq_len: int = 64,
     min_points: int = 5,
+    use_adaptive_cutoff: bool = True,
     device: str | None = None,
     max_markets: int | None = None,
 ) -> pd.DataFrame:
@@ -185,6 +186,7 @@ def score_resolved_markets_ts(
                 snapshot_offset_days=snapshot_offset_days,
                 seq_len=seq_len,
                 min_points=min_points,
+                use_adaptive_cutoff=use_adaptive_cutoff,
             )
             if sequence is None or sequence_length is None or snapshot_price is None:
                 skipped["no_sequence"] += 1
