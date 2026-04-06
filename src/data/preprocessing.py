@@ -186,8 +186,15 @@ def get_snapshot_price(
         # lo que NO es un buen snapshot. Solo usar si parece razonable.
         if 0.05 < price < 0.95:
             return price
-        # Precio extremo en mercado resuelto = dato contaminado, descartar
-        if market.get("resolved") or market.get("closed"):
+        # Precio extremo en mercado resuelto = dato contaminado, descartar.
+        # Polymarket indica resolución via: closed=True, umaResolutionStatus, o active=False.
+        is_resolved = (
+            market.get("resolved")
+            or market.get("closed")
+            or bool(market.get("umaResolutionStatus"))
+            or not market.get("active", True)
+        )
+        if is_resolved:
             logger.warning(
                 "Market %s: precio final extremo (%.2f), descartando. "
                 "Se necesita price_history para un snapshot válido.",

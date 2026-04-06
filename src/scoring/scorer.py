@@ -75,7 +75,17 @@ def score_active_markets(
             with torch.no_grad():
                 score = model(num_tensor, cat_tensor, txt_tensor).item()
 
-            price_yes = features["numerical"][0]
+            # Precio real del dict (features["numerical"][0] está escalado por el scaler)
+            op = market.get("outcomePrices", [])
+            if isinstance(op, str):
+                import json as _json
+                try:
+                    op = _json.loads(op)
+                except (ValueError, TypeError):
+                    op = []
+            price_yes = float(op[0]) if isinstance(op, list) and op else float(
+                market.get("lastTradePrice") or 0.5
+            )
             results.append({
                 "id": market_id,
                 "question": market.get("question", ""),

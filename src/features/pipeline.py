@@ -106,7 +106,7 @@ class FeaturePipeline:
                 se usan para calcular bid_depth, ask_depth, book_imbalance.
 
         Returns:
-            Dict con keys: numerical (N, 22), category_ids (N,),
+            Dict con keys: numerical (N, 23), category_ids (N,),
             text_embeddings (N, 384).
         """
         from ..data.preprocessing import preprocess_market_dict

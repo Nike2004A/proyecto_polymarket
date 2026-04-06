@@ -150,7 +150,17 @@ def backtest(
                 score = model(num_tensor, cat_tensor, txt_tensor).item()
 
             if score > threshold:
-                price = features["numerical"][0]  # price_yes
+                # Obtener precio real del dict (no el escalado del scaler)
+                op = market.get("outcomePrices", [])
+                if isinstance(op, str):
+                    import json as _json
+                    try:
+                        op = _json.loads(op)
+                    except (ValueError, TypeError):
+                        op = []
+                price = float(op[0]) if isinstance(op, list) and op else float(
+                    market.get("lastTradePrice") or 0
+                )
                 if price <= 0 or price >= 1:
                     continue
 
