@@ -28,8 +28,7 @@ def score_active_markets(
     NOTA sobre expected_alpha:
     El campo 'expected_alpha' es una heurística (score - price_yes).
     El model_score NO es una probabilidad calibrada de que el mercado
-    resuelva "Yes". Es un score de clasificación que indica si el modelo
-    cree que es buena compra dado el precio actual. Por tanto,
+    resuelva "Yes". Es un score de clasificación que indica si el modelo cree que es buena compra dado el precio actual. Por tanto,
     expected_alpha NO debe interpretarse como retorno esperado real,
     sino como una señal relativa de ranking.
 

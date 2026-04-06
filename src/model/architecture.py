@@ -16,7 +16,7 @@ class MarketValueNet(nn.Module):
 
     def __init__(
         self,
-        num_numerical_features: int = 14,
+        num_numerical_features: int = 23,
         num_categories: int = 20,
         category_embed_dim: int = 8,
         text_embed_dim: int = 384,

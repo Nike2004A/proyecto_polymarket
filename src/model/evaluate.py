@@ -156,7 +156,10 @@ def backtest(
 
                 bet_amount = capital * position_size
                 shares = bet_amount / price
-                resolution = str(market.get("resolution", "")).lower()
+                # market.get("resolution") es siempre None en la API.
+                # Inferir de outcomePrices: [1,0] = Yes, [0,1] = No.
+                from ..data.preprocessing import _infer_resolution_from_market
+                resolution = _infer_resolution_from_market(market)
                 payout = shares * (1.0 if resolution == "yes" else 0.0)
                 pnl = payout - bet_amount
                 capital += pnl

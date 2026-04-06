@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from sklearn.metrics import roc_auc_score
 
 from .architecture import MarketValueNet
 from .dataset import PolymarketDataset, create_dataloaders
@@ -46,8 +47,8 @@ def train_model(
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
-    best_val_loss = float("inf")
-    history = {"train_loss": [], "val_loss": [], "val_accuracy": []}
+    best_val_auc = 0.0
+    history = {"train_loss": [], "val_loss": [], "val_accuracy": [], "val_auc": []}
 
     for epoch in range(epochs):
         # ── Train ──
@@ -71,6 +72,7 @@ def train_model(
         # ── Validate ──
         model.eval()
         val_losses, correct, total = [], 0, 0
+        all_val_scores, all_val_labels = [], []
         with torch.no_grad():
             for batch in val_loader:
                 num = batch["numerical"].to(device)
@@ -85,6 +87,8 @@ def train_model(
                     predicted = (pred > 0.5).float()
                     correct += (predicted == lbl).sum().item()
                     total += lbl.size(0)
+                    all_val_scores.extend(pred.cpu().numpy())
+                    all_val_labels.extend(lbl.cpu().numpy())
 
         scheduler.step()
 
@@ -95,12 +99,18 @@ def train_model(
 
         if model.task == "classification":
             acc = correct / total if total > 0 else 0
+            # AUC-ROC es más informativa que accuracy para datos desbalanceados
+            try:
+                auc = roc_auc_score(all_val_labels, all_val_scores)
+            except ValueError:
+                auc = 0.0
             history["val_accuracy"].append(acc)
+            history["val_auc"].append(auc)
             print(
                 f"Epoch {epoch + 1}/{epochs} | "
-                f"Train Loss: {avg_train:.4f} | "
+                f"Train: {avg_train:.4f} | "
                 f"Val Loss: {avg_val:.4f} | "
-                f"Val Acc: {acc:.4f}"
+                f"Acc: {acc:.3f} | AUC: {auc:.3f}"
             )
         else:
             print(
@@ -109,9 +119,11 @@ def train_model(
                 f"Val Loss: {avg_val:.4f}"
             )
 
-        # Save best model
-        if avg_val < best_val_loss:
-            best_val_loss = avg_val
+        # Guardar mejor modelo por AUC (más relevante que val_loss con datos desbalanceados)
+        if model.task == "classification" and auc > best_val_auc:
+            best_val_auc = auc
+            torch.save(model.state_dict(), save_path / "best_market_model.pt")
+        elif model.task != "classification" and avg_val < float("inf"):
             torch.save(model.state_dict(), save_path / "best_market_model.pt")
 
     # Guardar último modelo e historial
@@ -119,7 +131,7 @@ def train_model(
     with open(save_path / "training_history.json", "w") as f:
         json.dump(history, f, indent=2)
 
-    print(f"\nEntrenamiento completado. Mejor val loss: {best_val_loss:.4f}")
+    print(f"\nEntrenamiento completado. Mejor val AUC: {best_val_auc:.4f}")
     print(f"Modelos guardados en {save_path}/")
 
     return history
@@ -177,7 +189,7 @@ def main():
     # Crear modelo
     model = MarketValueNet(
         num_numerical_features=dataset.numerical.shape[1],
-        num_categories=model_cfg.get("num_categories", 20),
+        num_categories=model_cfg.get("num_categories", 10),
         category_embed_dim=model_cfg.get("category_embed_dim", 8),
         text_embed_dim=dataset.text_emb.shape[1],
         hidden_dims=model_cfg.get("hidden_dims", [256, 128, 64]),
