@@ -1,3 +1,2 @@
-data/raw/*.json filter=lfs diff=lfs merge=lfs -text
 data/raw/price_histories.json filter=lfs diff=lfs merge=lfs -text
 data/raw/resolved_markets.json filter=lfs diff=lfs merge=lfs -text
