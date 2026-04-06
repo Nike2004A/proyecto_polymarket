@@ -18,7 +18,10 @@ from sklearn.metrics import (
 )
 
 from .architecture import MarketValueNet
-from ..data.preprocessing import _infer_resolution_from_market
+from ..data.preprocessing import (
+    _infer_resolution_from_market,
+    build_snapshot_market,
+)
 from ..features.pipeline import FeaturePipeline
 
 logger = logging.getLogger(__name__)
@@ -109,9 +112,11 @@ def backtest(
     model: MarketValueNet,
     historical_markets: list[dict],
     feature_pipeline: FeaturePipeline,
+    price_histories: dict | None = None,
     initial_capital: float = 1000.0,
     position_size: float = 0.05,
     threshold: float = 0.6,
+    snapshot_offset_days: int = 7,
     device: str | None = None,
 ) -> tuple[pd.DataFrame, float]:
     """
@@ -121,9 +126,12 @@ def backtest(
         model: Modelo entrenado.
         historical_markets: Lista de mercados resueltos.
         feature_pipeline: Pipeline de features.
+        price_histories: Historiales keyed por market_id para reconstruir
+            snapshots anti-leakage.
         initial_capital: Capital inicial.
         position_size: Fracción del capital por trade.
         threshold: Umbral mínimo del modelo para comprar.
+        snapshot_offset_days: Días antes del endDate para el snapshot.
         device: Dispositivo de cómputo.
 
     Returns:
@@ -138,9 +146,30 @@ def backtest(
     capital = initial_capital
     trades = []
 
+    if price_histories is None:
+        logger.warning(
+            "Backtest sin price_histories: se omitirán mercados sin snapshot válido."
+        )
+
     for market in historical_markets:
+        market_id = market.get("id", "?")
         try:
-            features = feature_pipeline.transform_single(market)
+            snapshot_market, snapshot_price = build_snapshot_market(
+                market,
+                price_histories=price_histories,
+                snapshot_offset_days=snapshot_offset_days,
+            )
+            if snapshot_market is None or snapshot_price is None:
+                continue
+
+            history = None
+            if price_histories is not None:
+                history = price_histories.get(str(market_id))
+
+            features = feature_pipeline.transform_single(
+                snapshot_market,
+                price_history=history,
+            )
             num_tensor = (
                 torch.FloatTensor(features["numerical"]).unsqueeze(0).to(device)
             )
@@ -153,16 +182,7 @@ def backtest(
                 score = model(num_tensor, cat_tensor, txt_tensor).item()
 
             if score > threshold:
-                # Obtener precio real del dict (no el escalado del scaler)
-                op = market.get("outcomePrices", [])
-                if isinstance(op, str):
-                    try:
-                        op = json.loads(op)
-                    except (ValueError, TypeError):
-                        op = []
-                price = float(op[0]) if isinstance(op, list) and op else float(
-                    market.get("lastTradePrice") or 0
-                )
+                price = float(snapshot_price)
                 if price <= 0 or price >= 1:
                     continue
 
@@ -176,9 +196,10 @@ def backtest(
                 capital += pnl
 
                 trades.append({
-                    "market_id": market.get("id", ""),
+                    "market_id": market_id,
                     "question": market.get("question", "")[:80],
                     "price_yes": price,
+                    "snapshot_offset_days": snapshot_offset_days,
                     "score": score,
                     "resolution": resolution,
                     "bet_amount": bet_amount,
@@ -188,7 +209,7 @@ def backtest(
         except Exception as e:
             logger.warning(
                 "Backtest: market %s omitido: %s",
-                market.get("id", "?"), e,
+                market_id, e,
             )
             continue
 

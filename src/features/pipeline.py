@@ -301,7 +301,7 @@ def run_pipeline(input_dir: str = "data/raw", output_dir: str = "data/processed"
         args.output = cfg.get("data", {}).get("processed_dir", args.output)
         args.dummy_text = cfg.get("features", {}).get("use_dummy_text", args.dummy_text)
 
-    from ..data.preprocessing import compute_label, get_snapshot_price
+    from ..data.preprocessing import build_snapshot_market, compute_label
 
     input_path = Path(args.input)
     output_path = Path(args.output)
@@ -325,11 +325,13 @@ def run_pipeline(input_dir: str = "data/raw", output_dir: str = "data/processed"
     skipped = {"no_snapshot": 0, "ambiguous": 0, "no_prices": 0}
 
     for m in resolved_markets:
-        snapshot_price = get_snapshot_price(
-            m, price_histories, snapshot_offset_days=args.snapshot_offset
+        snapshot_market, snapshot_price = build_snapshot_market(
+            m,
+            price_histories=price_histories,
+            snapshot_offset_days=args.snapshot_offset,
         )
 
-        if snapshot_price is None:
+        if snapshot_market is None or snapshot_price is None:
             skipped["no_snapshot"] += 1
             continue
 
@@ -338,12 +340,7 @@ def run_pipeline(input_dir: str = "data/raw", output_dir: str = "data/processed"
             skipped["ambiguous"] += 1
             continue
 
-        # Inyectar el snapshot price como outcomePrices para que las features
-        # numéricas usen el precio del snapshot, no el precio post-resolución
-        m_copy = m.copy()
-        m_copy["outcomePrices"] = [snapshot_price, 1.0 - snapshot_price]
-
-        valid_markets.append(m_copy)
+        valid_markets.append(snapshot_market)
         labels.append(label)
 
     logger.info("Mercados válidos para entrenamiento: %d", len(valid_markets))

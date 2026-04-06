@@ -229,6 +229,30 @@ def get_snapshot_price(
     return None
 
 
+def build_snapshot_market(
+    market: dict,
+    price_histories: dict | None = None,
+    snapshot_offset_days: int = 7,
+) -> tuple[dict | None, float | None]:
+    """
+    Construye una copia del mercado con outcomePrices reemplazado por el snapshot.
+
+    Esto alinea entrenamiento, evaluación y backtest con el mismo precio
+    pre-resolución y evita usar el precio final post-resolución por accidente.
+    """
+    snapshot_price = get_snapshot_price(
+        market,
+        price_histories=price_histories,
+        snapshot_offset_days=snapshot_offset_days,
+    )
+    if snapshot_price is None:
+        return None, None
+
+    market_snapshot = market.copy()
+    market_snapshot["outcomePrices"] = [snapshot_price, 1.0 - snapshot_price]
+    return market_snapshot, float(snapshot_price)
+
+
 def _infer_resolution_from_market(market: dict) -> str:
     """
     Infiere la resolución de un mercado a partir de outcomePrices.
