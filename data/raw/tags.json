@@ -1,0 +1,836 @@
+[
+  {
+    "id": "101259",
+    "label": "Health and Human Services",
+    "slug": "health-and-human-services",
+    "createdAt": "2024-11-13T19:58:34.318816Z",
+    "updatedAt": "2026-03-09T22:21:41.828275Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101842",
+    "label": "Sweeden",
+    "slug": "sweeden",
+    "createdAt": "2025-02-10T21:54:06.650573Z",
+    "updatedAt": "2026-03-09T22:21:41.830021Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101302",
+    "label": "attorney general",
+    "slug": "attorney-general",
+    "createdAt": "2024-11-21T20:31:05.176197Z",
+    "updatedAt": "2026-03-09T22:21:41.830966Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102067",
+    "label": "Madrid Open",
+    "slug": "madrid-open",
+    "createdAt": "2025-04-21T08:24:20.179712Z",
+    "updatedAt": "2026-03-09T22:21:41.831844Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101944",
+    "label": "Crypto Summit",
+    "slug": "crypto-summit",
+    "forceShow": false,
+    "createdAt": "2025-03-06T22:20:20.05325Z",
+    "updatedAt": "2026-03-09T22:21:41.833123Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100826",
+    "label": "DET",
+    "slug": "det",
+    "createdAt": "2024-10-11T20:10:37.760279Z",
+    "updatedAt": "2026-03-09T22:21:41.834033Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100539",
+    "label": "Costello",
+    "slug": "costello",
+    "createdAt": "2024-09-19T21:55:18.104421Z",
+    "updatedAt": "2026-03-09T22:21:41.835367Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102981",
+    "label": "Testing tag",
+    "slug": "testing-tag",
+    "forceShow": false,
+    "createdAt": "2025-12-21T02:15:49.183354Z",
+    "updatedAt": "2026-03-09T22:21:41.838305Z",
+    "isCarousel": false,
+    "requiresTranslation": false
+  },
+  {
+    "id": "101528",
+    "label": "altcoin",
+    "slug": "altcoin",
+    "createdAt": "2024-12-17T19:09:06.293208Z",
+    "updatedAt": "2026-03-09T22:21:41.839263Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102846",
+    "label": "Best of 2025",
+    "slug": "best-of-2025",
+    "forceShow": false,
+    "createdAt": "2025-11-13T21:49:57.96006Z",
+    "updatedAt": "2026-03-09T22:21:41.8402Z",
+    "isCarousel": false,
+    "requiresTranslation": false
+  },
+  {
+    "id": "102835",
+    "label": "Paradex",
+    "slug": "paradex",
+    "createdAt": "2025-11-12T18:09:44.740746Z",
+    "updatedAt": "2026-03-09T22:21:41.841188Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "1395",
+    "label": "odie",
+    "slug": "odie",
+    "publishedAt": "2024-02-21 20:27:03.637+00",
+    "createdAt": "2024-02-21T20:27:03.666Z",
+    "updatedAt": "2026-03-09T22:21:41.842226Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "103672",
+    "label": "gold medals",
+    "slug": "gold-medals",
+    "createdAt": "2026-02-05T20:43:58.939922Z",
+    "updatedAt": "2026-03-09T22:21:41.843127Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101936",
+    "label": "Address to Congress",
+    "slug": "address-to-congress",
+    "forceShow": false,
+    "createdAt": "2025-03-03T18:42:58.297867Z",
+    "updatedAt": "2026-03-09T22:21:41.844082Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102217",
+    "label": "Connor McDavid",
+    "slug": "connor-mcdavid",
+    "createdAt": "2025-06-06T15:43:32.859417Z",
+    "updatedAt": "2026-03-09T22:21:41.84501Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101622",
+    "label": "Debt",
+    "slug": "debt",
+    "createdAt": "2025-01-05T01:24:21.992908Z",
+    "updatedAt": "2026-03-09T22:21:41.845904Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100666",
+    "label": "pregnant",
+    "slug": "pregnant",
+    "createdAt": "2024-09-27T20:25:05.506979Z",
+    "updatedAt": "2026-03-09T22:21:41.848532Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101662",
+    "label": "sciene",
+    "slug": "sciene",
+    "createdAt": "2025-01-09T14:11:44.268388Z",
+    "updatedAt": "2026-03-09T22:21:41.849354Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101052",
+    "label": "Topuria",
+    "slug": "topuria",
+    "createdAt": "2024-10-22T18:10:40.07695Z",
+    "updatedAt": "2026-03-09T22:21:41.850206Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102934",
+    "label": "college Football Playoffs",
+    "slug": "college-football-playoffs",
+    "createdAt": "2025-12-04T19:38:41.502582Z",
+    "updatedAt": "2026-03-09T22:21:41.851078Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102963",
+    "label": "Daylight",
+    "slug": "daylight",
+    "createdAt": "2025-12-15T21:53:04.853603Z",
+    "updatedAt": "2026-03-09T22:21:41.851935Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "103678",
+    "label": "initial jobless claims",
+    "slug": "initial-jobless-claims",
+    "createdAt": "2026-02-05T23:41:34.331484Z",
+    "updatedAt": "2026-03-09T22:21:41.853725Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102071",
+    "label": "fartcoin",
+    "slug": "fartcoin",
+    "createdAt": "2025-04-22T14:22:56.83916Z",
+    "updatedAt": "2026-03-09T22:21:41.854757Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101672",
+    "label": "Valorant",
+    "slug": "valorant",
+    "createdAt": "2025-01-10T17:31:49.067606Z",
+    "updatedAt": "2026-03-09T22:21:41.856737Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100968",
+    "label": "commodity",
+    "slug": "commodity",
+    "createdAt": "2024-10-21T19:33:39.89692Z",
+    "updatedAt": "2026-03-09T22:21:41.857651Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101667",
+    "label": "keir",
+    "slug": "keir",
+    "createdAt": "2025-01-09T17:32:57.605022Z",
+    "updatedAt": "2026-03-09T22:21:41.858515Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101531",
+    "label": "Strategic Bitcoin Reserve",
+    "slug": "strategic-bitcoin-reserve",
+    "createdAt": "2024-12-17T19:34:41.169053Z",
+    "updatedAt": "2026-03-09T22:21:41.859425Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100829",
+    "label": "footall",
+    "slug": "footall",
+    "createdAt": "2024-10-11T22:01:19.206128Z",
+    "updatedAt": "2026-03-09T22:21:41.860308Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102634",
+    "label": "T20 Cricket",
+    "slug": "t20-cricket",
+    "forceShow": false,
+    "createdAt": "2025-09-30T23:04:19.458898Z",
+    "updatedAt": "2026-03-09T22:21:41.861192Z",
+    "isCarousel": false,
+    "requiresTranslation": false
+  },
+  {
+    "id": "101286",
+    "label": "Victor Gyökeres",
+    "slug": "victor-gyokeres",
+    "createdAt": "2024-11-19T18:32:58.599468Z",
+    "updatedAt": "2026-03-09T22:21:41.862064Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101256",
+    "label": "Paul vs. Tyson",
+    "slug": "paul-vspt-tyson",
+    "createdAt": "2024-11-13T17:30:35.128659Z",
+    "updatedAt": "2026-03-09T22:21:41.862966Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102136",
+    "label": "Timothée Chalamet",
+    "slug": "timothee-chalamet",
+    "createdAt": "2025-05-15T16:30:05.353905Z",
+    "updatedAt": "2026-03-09T22:21:41.86389Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102937",
+    "label": "Toronto",
+    "slug": "toronto",
+    "createdAt": "2025-12-05T16:07:48.925433Z",
+    "updatedAt": "2026-03-09T22:21:41.864789Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102220",
+    "label": "Haliburton",
+    "slug": "haliburton",
+    "createdAt": "2025-06-06T16:28:11.31899Z",
+    "updatedAt": "2026-03-09T22:21:41.865679Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101666",
+    "label": "Pheonix",
+    "slug": "pheonix",
+    "createdAt": "2025-01-09T17:06:40.127611Z",
+    "updatedAt": "2026-03-09T22:21:41.866562Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "1481",
+    "label": "it never went away",
+    "slug": "it-never-went-away",
+    "publishedAt": "2024-02-27 19:12:43.491+00",
+    "createdAt": "2024-02-27T19:12:43.631Z",
+    "updatedAt": "2026-03-09T22:21:41.867478Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100851",
+    "label": "Stanton",
+    "slug": "stanton",
+    "createdAt": "2024-10-13T19:17:09.5184Z",
+    "updatedAt": "2026-03-09T22:21:41.868396Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102940",
+    "label": "Industry",
+    "slug": "industry",
+    "createdAt": "2025-12-05T19:39:43.316224Z",
+    "updatedAt": "2026-03-09T22:21:41.869223Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100779",
+    "label": "luka",
+    "slug": "luka",
+    "createdAt": "2024-10-09T18:16:12.388013Z",
+    "updatedAt": "2026-03-09T22:21:41.871748Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101527",
+    "label": "Goals",
+    "slug": "goals",
+    "createdAt": "2024-12-17T18:59:57.366508Z",
+    "updatedAt": "2026-03-09T22:21:41.872597Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101050",
+    "label": "Ilia",
+    "slug": "ilia",
+    "createdAt": "2024-10-22T18:10:39.607235Z",
+    "updatedAt": "2026-03-09T22:21:41.873471Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102262",
+    "label": "robotaxi",
+    "slug": "robotaxi",
+    "createdAt": "2025-06-11T13:49:05.339034Z",
+    "updatedAt": "2026-03-09T22:21:41.874299Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102401",
+    "label": "ATP Tour",
+    "slug": "atp-tour",
+    "createdAt": "2025-07-15T17:15:30.191805Z",
+    "updatedAt": "2026-03-09T22:21:41.875153Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101042",
+    "label": "Athletic Bilbao",
+    "slug": "athletic-bilbao",
+    "createdAt": "2024-10-22T16:43:06.566258Z",
+    "updatedAt": "2026-03-09T22:21:41.878637Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102216",
+    "label": "UFC 316",
+    "slug": "ufc-316",
+    "createdAt": "2025-06-06T14:53:28.068956Z",
+    "updatedAt": "2026-03-09T22:21:41.879607Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "371",
+    "label": "non-oil industry",
+    "slug": "non-oil-industry",
+    "publishedAt": "2023-11-02 22:07:05.422+00",
+    "createdAt": "2023-11-02T22:07:07.062Z",
+    "updatedAt": "2026-03-09T22:21:41.880554Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101196",
+    "label": "Talk Tuah",
+    "slug": "talk-tuah",
+    "createdAt": "2024-11-06T20:42:32.435235Z",
+    "updatedAt": "2026-03-09T22:21:41.881635Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102973",
+    "label": "macro",
+    "slug": "macro",
+    "createdAt": "2025-12-17T23:09:00.706865Z",
+    "updatedAt": "2026-03-09T22:21:41.882622Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100283",
+    "label": "NBA Draft",
+    "slug": "nba-draft",
+    "forceShow": false,
+    "createdAt": "2024-06-25T00:18:43.354155Z",
+    "updatedAt": "2026-03-09T22:21:41.884442Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101623",
+    "label": "WashPO",
+    "slug": "washpo",
+    "createdAt": "2025-01-05T22:18:23.100624Z",
+    "updatedAt": "2026-03-09T22:21:41.885385Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "99",
+    "label": "u.s. 2024 elections",
+    "slug": "uptspt-2024-elections",
+    "publishedAt": "2023-11-02 21:19:11.036+00",
+    "createdAt": "2023-11-02T21:19:11.042Z",
+    "updatedAt": "2026-03-09T22:21:41.886322Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100967",
+    "label": "AP",
+    "slug": "ap",
+    "createdAt": "2024-10-21T19:17:25.633225Z",
+    "updatedAt": "2026-03-09T22:21:41.887306Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "58",
+    "label": "nuggets",
+    "slug": "nuggets",
+    "publishedAt": "2023-11-02 21:15:12.646+00",
+    "createdAt": "2023-11-02T21:15:12.651Z",
+    "updatedAt": "2026-03-09T22:21:41.888249Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "103662",
+    "label": "2026 NBA All-Star",
+    "slug": "2026-nba-all-star",
+    "createdAt": "2026-02-05T18:47:24.019673Z",
+    "updatedAt": "2026-03-09T22:21:41.889168Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102291",
+    "label": "Mallorca Championships",
+    "slug": "mallorca-championships",
+    "createdAt": "2025-06-19T21:38:42.299343Z",
+    "updatedAt": "2026-03-09T22:21:41.89012Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101311",
+    "label": "Mass Deportation",
+    "slug": "mass-deportation",
+    "createdAt": "2024-11-22T03:31:02.366088Z",
+    "updatedAt": "2026-03-09T22:21:41.891176Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "851",
+    "label": "nyc",
+    "slug": "nyc",
+    "publishedAt": "2024-01-10 21:54:44.093+00",
+    "createdAt": "2024-01-10T21:54:44.108Z",
+    "updatedAt": "2026-03-09T22:21:41.892244Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102260",
+    "label": "union jack",
+    "slug": "union-jack",
+    "createdAt": "2025-06-10T23:23:01.557866Z",
+    "updatedAt": "2026-03-09T22:21:41.893327Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "809",
+    "label": "nyt",
+    "slug": "nyt",
+    "publishedAt": "2023-12-29 01:02:35.911+00",
+    "createdAt": "2023-12-29T01:02:35.92Z",
+    "updatedAt": "2026-03-09T22:21:41.894252Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101051",
+    "label": "Holloway",
+    "slug": "holloway",
+    "createdAt": "2024-10-22T18:10:39.839008Z",
+    "updatedAt": "2026-03-09T22:21:41.895153Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "1320",
+    "label": "prison",
+    "slug": "prison",
+    "publishedAt": "2024-02-13 23:17:04.871+00",
+    "createdAt": "2024-02-13T23:17:04.885Z",
+    "updatedAt": "2026-03-09T22:21:41.896065Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102761",
+    "label": "trends",
+    "slug": "trends",
+    "createdAt": "2025-10-22T00:06:38.641058Z",
+    "updatedAt": "2026-03-09T22:21:41.896996Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "103657",
+    "label": "wemby",
+    "slug": "wemby",
+    "createdAt": "2026-02-05T16:00:14.776485Z",
+    "updatedAt": "2026-03-09T22:21:41.897898Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100833",
+    "label": "NFL Week 6",
+    "slug": "nfl-week-6",
+    "createdAt": "2024-10-11T22:01:20.097898Z",
+    "updatedAt": "2026-03-09T22:21:41.898875Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "103681",
+    "label": "acquire",
+    "slug": "acquire",
+    "createdAt": "2026-02-06T16:43:28.300754Z",
+    "updatedAt": "2026-03-09T22:21:41.900685Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100665",
+    "label": "props",
+    "slug": "props",
+    "createdAt": "2024-09-27T19:17:27.476228Z",
+    "updatedAt": "2026-03-09T22:21:41.90177Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101273",
+    "label": "Tank Davis",
+    "slug": "tank-davis",
+    "createdAt": "2024-11-16T06:25:46.489718Z",
+    "updatedAt": "2026-03-09T22:21:41.902844Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "1463",
+    "label": "odysseus lander",
+    "slug": "odysseus-lander",
+    "publishedAt": "2024-02-27 00:11:56.484+00",
+    "createdAt": "2024-02-27T00:11:56.501Z",
+    "updatedAt": "2026-03-09T22:21:41.903847Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101172",
+    "label": "concession",
+    "slug": "concession",
+    "createdAt": "2024-11-03T18:26:26.967475Z",
+    "updatedAt": "2026-03-09T22:21:41.904807Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101665",
+    "label": "LA Rams",
+    "slug": "la-rams",
+    "createdAt": "2025-01-09T17:06:39.854944Z",
+    "updatedAt": "2026-03-09T22:21:41.90578Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "819",
+    "label": "paramount",
+    "slug": "paramount",
+    "publishedAt": "2024-01-02 18:52:42.136+00",
+    "createdAt": "2024-01-02T18:52:42.148Z",
+    "updatedAt": "2026-03-09T22:21:41.908853Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "1420",
+    "label": "og anunoby",
+    "slug": "og-anunoby",
+    "publishedAt": "2024-02-22 20:21:48.382+00",
+    "createdAt": "2024-02-22T20:21:49.132Z",
+    "updatedAt": "2026-03-09T22:21:41.909818Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100856",
+    "label": "Josh Allen",
+    "slug": "josh-allen",
+    "createdAt": "2024-10-14T15:52:08.407262Z",
+    "updatedAt": "2026-03-09T22:21:41.910795Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101044",
+    "label": "Malmo",
+    "slug": "malmo",
+    "createdAt": "2024-10-22T16:45:25.345346Z",
+    "updatedAt": "2026-03-09T22:21:41.911673Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102876",
+    "label": "USD.AI",
+    "slug": "usdptai",
+    "createdAt": "2025-11-18T23:44:15.112777Z",
+    "updatedAt": "2026-03-09T22:21:41.91253Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101313",
+    "label": "Taiki Maeda",
+    "slug": "taiki-maeda",
+    "forceShow": false,
+    "createdAt": "2024-11-22T20:47:06.217668Z",
+    "updatedAt": "2026-03-09T22:21:41.913439Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101958",
+    "label": "black sea",
+    "slug": "black-sea",
+    "createdAt": "2025-03-18T17:41:17.907523Z",
+    "updatedAt": "2026-03-09T22:21:41.916134Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102432",
+    "label": "Atlanta",
+    "slug": "atlanta",
+    "createdAt": "2025-07-23T17:58:16.610119Z",
+    "updatedAt": "2026-03-09T22:21:41.916958Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "90",
+    "label": "nuclear weapons",
+    "slug": "nuclear-weapons",
+    "publishedAt": "2023-11-02 21:18:18.331+00",
+    "updatedBy": 13,
+    "createdAt": "2023-11-02T21:18:18.35Z",
+    "updatedAt": "2026-03-09T22:21:41.917834Z",
+    "forceHide": true,
+    "requiresTranslation": false
+  },
+  {
+    "id": "279",
+    "label": "UFC",
+    "slug": "ufc",
+    "forceShow": false,
+    "publishedAt": "2023-11-02 21:47:41.588+00",
+    "createdAt": "2023-11-02T21:47:41.595Z",
+    "updatedAt": "2026-03-09T22:21:41.918707Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102052",
+    "label": "Senators",
+    "slug": "senators",
+    "createdAt": "2025-04-16T08:16:36.064985Z",
+    "updatedAt": "2026-03-09T22:21:41.919531Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "100836",
+    "label": "gami",
+    "slug": "gami",
+    "createdAt": "2024-10-11T22:41:29.765592Z",
+    "updatedAt": "2026-03-09T22:21:41.9204Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "1072",
+    "label": "marianne williamson",
+    "slug": "marianne-williamson",
+    "publishedAt": "2024-02-06 19:38:09.903+00",
+    "createdAt": "2024-02-06T19:38:09.908Z",
+    "updatedAt": "2026-03-09T22:21:41.921256Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101903",
+    "label": "list",
+    "slug": "list",
+    "createdAt": "2025-02-25T18:06:01.71721Z",
+    "updatedAt": "2026-03-09T22:21:41.922071Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102000",
+    "label": "Macro Indicators",
+    "slug": "macro-indicators",
+    "forceShow": false,
+    "createdAt": "2025-03-26T21:57:53.430333Z",
+    "updatedAt": "2026-03-09T22:23:42.224247Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102992",
+    "label": "MX",
+    "slug": "mx",
+    "createdAt": "2025-12-23T17:54:16.05885Z",
+    "updatedAt": "2026-03-09T22:23:42.226139Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102448",
+    "label": "Liga MX",
+    "slug": "mex",
+    "createdAt": "2025-07-28T19:10:50.475854Z",
+    "updatedAt": "2026-03-09T22:23:42.226765Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102333",
+    "label": "Monad",
+    "slug": "monad",
+    "createdAt": "2025-06-26T19:25:15.015997Z",
+    "updatedAt": "2026-03-09T22:23:42.227275Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101129",
+    "label": "Brighton & Hove Albion",
+    "slug": "brighton-hove-albion",
+    "createdAt": "2024-10-29T21:51:12.793194Z",
+    "updatedAt": "2026-03-09T22:23:42.227817Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102080",
+    "label": "babies",
+    "slug": "babies",
+    "createdAt": "2025-04-23T20:03:23.48982Z",
+    "updatedAt": "2026-03-09T22:23:42.228315Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "92",
+    "label": "global warming",
+    "slug": "global-warming",
+    "publishedAt": "2023-11-02 21:18:29.845+00",
+    "updatedBy": 15,
+    "createdAt": "2023-11-02T21:18:29.861Z",
+    "updatedAt": "2026-03-09T22:23:42.228834Z",
+    "forceHide": true,
+    "requiresTranslation": false
+  },
+  {
+    "id": "104291",
+    "label": "Beirut",
+    "slug": "beirut",
+    "createdAt": "2026-03-24T15:47:44.91183Z",
+    "updatedAt": "2026-03-24T15:50:18.976444Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102036",
+    "label": "Play-In Tournament",
+    "slug": "play-in-tournament",
+    "createdAt": "2025-04-14T08:36:54.28889Z",
+    "updatedAt": "2026-03-09T22:22:01.865875Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "1514",
+    "label": "ohio state",
+    "slug": "ohio-state",
+    "publishedAt": "2024-02-28 22:13:57.88+00",
+    "createdAt": "2024-02-28T22:13:58.008Z",
+    "updatedAt": "2026-03-09T22:22:01.867289Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101543",
+    "label": "Gov shutdwon",
+    "slug": "gov-shutdwon",
+    "createdAt": "2024-12-18T17:31:51.370768Z",
+    "updatedAt": "2026-03-09T22:22:01.868146Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101186",
+    "label": "Maccabi TLV",
+    "slug": "maccabi-tlv",
+    "createdAt": "2024-11-05T21:49:27.522545Z",
+    "updatedAt": "2026-03-09T22:22:01.868996Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "101818",
+    "label": "Wycombe Wanderers",
+    "slug": "wycombe-wanderers",
+    "createdAt": "2025-02-07T19:39:54.112282Z",
+    "updatedAt": "2026-03-09T22:22:01.870577Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102304",
+    "label": "Khamenei",
+    "slug": "khamenei",
+    "forceShow": false,
+    "createdAt": "2025-06-23T18:41:15.452041Z",
+    "updatedAt": "2026-03-09T22:22:01.871485Z",
+    "isCarousel": false,
+    "requiresTranslation": false
+  },
+  {
+    "id": "100837",
+    "label": "Beterbiev",
+    "slug": "beterbiev",
+    "createdAt": "2024-10-11T22:51:53.734443Z",
+    "updatedAt": "2026-03-09T22:22:01.872304Z",
+    "requiresTranslation": false
+  },
+  {
+    "id": "102331",
+    "label": "hype",
+    "slug": "hype",
+    "createdAt": "2025-06-26T16:13:43.296388Z",
+    "updatedAt": "2026-03-09T22:22:01.873326Z",
+    "requiresTranslation": false
+  }
+]

@@ -13,6 +13,18 @@ from .client import PolymarketDataClient
 logger = logging.getLogger(__name__)
 
 
+def _deduplicate(markets: list[dict]) -> list[dict]:
+    """Elimina duplicados por id, preservando el primero."""
+    seen: set[str] = set()
+    result: list[dict] = []
+    for m in markets:
+        mid = str(m.get("id", ""))
+        if mid and mid not in seen:
+            seen.add(mid)
+            result.append(m)
+    return result
+
+
 class DataFetcher:
     """Descarga y cachea datos de Polymarket en disco."""
 
@@ -35,22 +47,28 @@ class DataFetcher:
             return json.load(f)
 
     def fetch_active_markets(self, max_markets: int = 3000) -> list[dict]:
-        """Descarga mercados activos y guarda en disco."""
+        """Descarga mercados activos, deduplica por id y guarda en disco."""
         print(f"Descargando hasta {max_markets} mercados activos...")
         markets = self.client.get_all_active_markets(max_markets=max_markets)
         parsed = [self.client.parse_market(m) for m in markets]
-        self._save_json(parsed, "active_markets.json")
-        print(f"  -> {len(parsed)} mercados activos guardados.")
-        return parsed
+        unique = _deduplicate(parsed)
+        if len(unique) < len(parsed):
+            print(f"  ({len(parsed) - len(unique)} duplicados eliminados)")
+        self._save_json(unique, "active_markets.json")
+        print(f"  -> {len(unique)} mercados activos guardados.")
+        return unique
 
     def fetch_resolved_markets(self, max_markets: int = 5000) -> list[dict]:
-        """Descarga mercados resueltos (para training labels)."""
+        """Descarga mercados resueltos, deduplica por id y guarda en disco."""
         print(f"Descargando hasta {max_markets} mercados resueltos...")
         markets = self.client.get_all_resolved_markets(max_markets=max_markets)
         parsed = [self.client.parse_market(m) for m in markets]
-        self._save_json(parsed, "resolved_markets.json")
-        print(f"  -> {len(parsed)} mercados resueltos guardados.")
-        return parsed
+        unique = _deduplicate(parsed)
+        if len(unique) < len(parsed):
+            print(f"  ({len(parsed) - len(unique)} duplicados eliminados)")
+        self._save_json(unique, "resolved_markets.json")
+        print(f"  -> {len(unique)} mercados resueltos guardados.")
+        return unique
 
     def fetch_tags(self) -> list[dict]:
         """Descarga etiquetas/categorías."""

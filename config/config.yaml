@@ -14,8 +14,8 @@ api:
 # Cualquier punto de su historia simula un "mercado activo" — no se necesitan activos para entrenar.
 # Los activos se descargan en cantidad pequeña solo para el demo de scoring en vivo.
 data:
-  max_active_markets: 1000      # pequeño: solo para demo de scoring en vivo
-  max_resolved_markets: 20000   # grande: todo el dataset de entrenamiento
+  max_active_markets: 1200      # pedir 1200 → ~1000 únicos tras dedup (~15% duplicados API)
+  max_resolved_markets: 32000   # pedir 32k → ~22k únicos tras dedup → ~20k con histories reales
   # max_order_books: sin definir = todos los activos descargados (sin límite artificial)
   raw_dir: "data/raw"
   processed_dir: "data/processed"
