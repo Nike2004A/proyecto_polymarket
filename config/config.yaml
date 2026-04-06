@@ -10,17 +10,19 @@ api:
   rate_limit_delay: 0.2  # seconds between API calls
 
 # Data fetching
+# Todo el training viene de resueltos: tienen serie temporal completa + outcome (label).
+# Cualquier punto de su historia simula un "mercado activo" — no se necesitan activos para entrenar.
+# Los activos se descargan en cantidad pequeña solo para el demo de scoring en vivo.
 data:
-  max_active_markets: 2000
-  max_resolved_markets: 5000
-  max_order_books: 500
-  max_price_histories: 500
+  max_active_markets: 1000      # pequeño: solo para demo de scoring en vivo
+  max_resolved_markets: 20000   # grande: todo el dataset de entrenamiento
+  # max_order_books: sin definir = todos los activos descargados (sin límite artificial)
   raw_dir: "data/raw"
   processed_dir: "data/processed"
 
 # Feature engineering
 features:
-  numerical_features: 14
+  numerical_features: 23
   text_model: "all-MiniLM-L6-v2"
   text_embed_dim: 384
   use_dummy_text: false  # Set to true for testing without sentence-transformers
@@ -28,7 +30,7 @@ features:
 # Model hyperparameters
 model:
   task: "classification"  # "classification" or "regression"
-  num_categories: 20
+  num_categories: 10
   category_embed_dim: 8
   hidden_dims: [256, 128, 64]
   dropout: 0.3
