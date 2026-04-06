@@ -31,7 +31,7 @@ Sistema end-to-end en Python que consume la API de Polymarket, extrae features d
 │                     ┌───────────────────────────────▼────────────┐  │
 │                     │         SCORING & OUTPUT                    │  │
 │                     │                                            │  │
-│                     │ - Ranking de mercados por alpha esperado   │  │
+│                     │ - Ranking de mercados por model score      │  │
 │                     │ - Señales: STRONG BUY / BUY / HOLD        │  │
 │                     │ - Jupyter Notebooks con visualizaciones    │  │
 │                     └────────────────────────────────────────────┘  │
@@ -206,8 +206,8 @@ Para cada mercado resuelto se extrae el precio en un **snapshot anti-leakage**:
 
 | Señal | Condicion |
 |---|---|
-| **STRONG BUY** | Score >= 0.75, alpha >= 0.05, buena liquidez |
-| **BUY** | Score >= 0.60, alpha >= 0.05 |
+| **STRONG BUY** | Score >= 0.75, buena liquidez |
+| **BUY** | Score >= 0.60 |
 | **HOLD** | No cumple filtros de calidad o score bajo |
 
 ## Hallazgos del EDA
