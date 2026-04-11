@@ -10,6 +10,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, Subset, WeightedRandomSampler
 
+from .splits import build_dataset_split
+
 logger = logging.getLogger(__name__)
 
 
@@ -124,35 +126,63 @@ def create_ts_dataloaders(
     seed: int = 42,
 ) -> tuple[DataLoader, DataLoader]:
     """Crea dataloaders train/val para el dataset TS."""
-    n = len(dataset)
-    n_val = int(n * val_split)
-    n_train = n - n_val
+    split_strategy = "temporal" if temporal_split else "random"
+    train_loader, val_loader, _, _ = create_ts_train_val_test_dataloaders(
+        dataset,
+        batch_size=batch_size,
+        val_split=val_split,
+        test_split=0.0,
+        use_weighted_sampler=use_weighted_sampler,
+        num_workers=num_workers,
+        split_strategy=split_strategy,
+        seed=seed,
+    )
+    return train_loader, val_loader
 
-    if temporal_split and dataset.timestamps is not None:
-        sorted_indices = np.argsort(dataset.timestamps)
-        train_indices = sorted_indices[:n_train].tolist()
-        val_indices = sorted_indices[n_train:].tolist()
+
+def create_ts_train_val_test_dataloaders(
+    dataset: TimeSeriesMarketDataset,
+    batch_size: int = 64,
+    val_split: float = 0.15,
+    test_split: float = 0.15,
+    use_weighted_sampler: bool = True,
+    num_workers: int = 0,
+    split_strategy: str = "random",
+    seed: int = 42,
+) -> tuple[DataLoader, DataLoader, DataLoader | None, dict]:
+    """Crea dataloaders train/val/test para el dataset TS."""
+    split = build_dataset_split(
+        n_samples=len(dataset),
+        labels=dataset.labels.numpy(),
+        timestamps=dataset.timestamps,
+        val_split=val_split,
+        test_split=test_split,
+        strategy=split_strategy,
+        seed=seed,
+    )
+
+    if split.strategy == "temporal":
         logger.info(
-            "Temporal split TS: train=%d (más antiguos), val=%d (más recientes)",
-            len(train_indices),
-            len(val_indices),
+            "Temporal split TS: train=%d, val=%d, test=%d",
+            len(split.train_indices),
+            len(split.val_indices),
+            len(split.test_indices),
         )
     else:
-        if temporal_split:
-            raise ValueError(
-                "temporal_split=True pero el dataset TS no tiene end_dates.npy."
-            )
-        generator = torch.Generator().manual_seed(seed)
-        all_indices = torch.randperm(n, generator=generator).tolist()
-        train_indices = all_indices[:n_train]
-        val_indices = all_indices[n_train:]
+        logger.info(
+            "Random split TS: train=%d, val=%d, test=%d (seed=%d)",
+            len(split.train_indices),
+            len(split.val_indices),
+            len(split.test_indices),
+            seed,
+        )
 
-    train_ds = Subset(dataset, train_indices)
-    val_ds = Subset(dataset, val_indices)
+    train_ds = Subset(dataset, split.train_indices)
+    val_ds = Subset(dataset, split.val_indices)
 
     train_sampler = None
     if use_weighted_sampler:
-        train_labels = dataset.labels[train_indices].to(torch.long)
+        train_labels = dataset.labels[split.train_indices].to(torch.long)
         class_counts = torch.bincount(train_labels)
         if len(class_counts) >= 2 and class_counts.min() > 0:
             class_weights = 1.0 / class_counts.float()
@@ -181,4 +211,25 @@ def create_ts_dataloaders(
         num_workers=num_workers,
         collate_fn=collate_ts_batch,
     )
-    return train_loader, val_loader
+
+    test_loader = None
+    if split.test_indices:
+        test_loader = DataLoader(
+            Subset(dataset, split.test_indices),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            collate_fn=collate_ts_batch,
+        )
+
+    metadata = split.to_metadata()
+    metadata["class_balance"] = {
+        "train_positive_rate": float(dataset.labels[split.train_indices].float().mean().item()),
+        "val_positive_rate": float(dataset.labels[split.val_indices].float().mean().item()),
+        "test_positive_rate": (
+            float(dataset.labels[split.test_indices].float().mean().item())
+            if split.test_indices
+            else None
+        ),
+    }
+    return train_loader, val_loader, test_loader, metadata

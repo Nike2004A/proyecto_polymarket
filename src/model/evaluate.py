@@ -7,17 +7,9 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    roc_auc_score,
-    confusion_matrix,
-    classification_report,
-)
 
 from .architecture import MarketValueNet
+from .metrics import compute_binary_classification_metrics
 from ..data.preprocessing import (
     infer_resolution_from_market,
     build_snapshot_market,
@@ -30,6 +22,7 @@ logger = logging.getLogger(__name__)
 def evaluate_model(
     model: MarketValueNet,
     dataloader: DataLoader,
+    threshold: float = 0.5,
     device: str | None = None,
 ) -> dict:
     """
@@ -44,7 +37,6 @@ def evaluate_model(
     model.eval()
     model.to(device)
 
-    all_preds = []
     all_labels = []
     all_scores = []
 
@@ -59,31 +51,16 @@ def evaluate_model(
             all_scores.extend(scores.numpy())
             all_labels.extend(lbl.numpy())
 
-            if model.task == "classification":
-                preds = (scores > 0.5).float()
-                all_preds.extend(preds.numpy())
-
     all_labels = np.array(all_labels)
     all_scores = np.array(all_scores)
-
     results = {"scores": all_scores, "labels": all_labels}
 
     if model.task == "classification":
-        all_preds = np.array(all_preds)
-        results.update({
-            "predictions": all_preds,
-            "accuracy": accuracy_score(all_labels, all_preds),
-            "precision": precision_score(all_labels, all_preds, zero_division=0),
-            "recall": recall_score(all_labels, all_preds, zero_division=0),
-            "f1": f1_score(all_labels, all_preds, zero_division=0),
-            "roc_auc": roc_auc_score(all_labels, all_scores)
-            if len(np.unique(all_labels)) > 1
-            else 0.0,
-            "confusion_matrix": confusion_matrix(all_labels, all_preds),
-            "classification_report": classification_report(
-                all_labels, all_preds, target_names=["No Buy", "Buy"]
-            ),
-        })
+        results = compute_binary_classification_metrics(
+            all_labels,
+            all_scores,
+            threshold=threshold,
+        )
     else:
         mse = float(np.mean((all_scores - all_labels) ** 2))
         mae = float(np.mean(np.abs(all_scores - all_labels)))
@@ -96,11 +73,13 @@ def print_evaluation(results: dict) -> None:
     """Imprime resultados de evaluación."""
     if "accuracy" in results:
         print("=== Resultados de Clasificación ===")
+        print(f"  Threshold: {results['threshold']:.4f}")
         print(f"  Accuracy:  {results['accuracy']:.4f}")
         print(f"  Precision: {results['precision']:.4f}")
         print(f"  Recall:    {results['recall']:.4f}")
         print(f"  F1 Score:  {results['f1']:.4f}")
         print(f"  ROC AUC:   {results['roc_auc']:.4f}")
+        print(f"  PR AUC:    {results['pr_auc']:.4f}")
         print(f"\n{results['classification_report']}")
     else:
         print("=== Resultados de Regresión ===")

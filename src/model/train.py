@@ -9,12 +9,26 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import average_precision_score, roc_auc_score
 
 from .architecture import MarketValueNet
-from .dataset import PolymarketDataset, create_dataloaders
+from .dataset import PolymarketDataset, create_train_val_test_dataloaders
+from .evaluate import evaluate_model
+from .metrics import find_best_threshold
 
 logger = logging.getLogger(__name__)
+
+
+def _to_json_serializable(value):
+    if isinstance(value, dict):
+        return {k: _to_json_serializable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_json_serializable(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
 
 
 def train_model(
@@ -23,8 +37,9 @@ def train_model(
     val_loader: DataLoader,
     epochs: int = 50,
     lr: float = 1e-3,
+    patience: int | None = None,
     device: str | None = None,
-    save_dir: str = "data/models",
+    save_dir: str = "data/models/market_value_baseline",
 ) -> dict:
     """
     Entrena el modelo MarketValueNet.
@@ -48,7 +63,17 @@ def train_model(
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     best_val_auc = 0.0
-    history = {"train_loss": [], "val_loss": [], "val_accuracy": [], "val_auc": []}
+    best_val_loss = float("inf")
+    best_epoch = 0
+    no_improve_epochs = 0
+    effective_patience = patience if patience is not None and patience > 0 else None
+    history = {
+        "train_loss": [],
+        "val_loss": [],
+        "val_accuracy": [],
+        "val_auc": [],
+        "val_pr_auc": [],
+    }
 
     for epoch in range(epochs):
         # ── Train ──
@@ -97,6 +122,7 @@ def train_model(
         history["train_loss"].append(avg_train)
         history["val_loss"].append(avg_val)
 
+        metric_improved = False
         if model.task == "classification":
             acc = correct / total if total > 0 else 0
             # AUC-ROC es más informativa que accuracy para datos desbalanceados
@@ -104,11 +130,16 @@ def train_model(
                 auc = roc_auc_score(all_val_labels, all_val_scores)
             except ValueError:
                 auc = 0.0
+            try:
+                pr_auc = average_precision_score(all_val_labels, all_val_scores)
+            except ValueError:
+                pr_auc = 0.0
             history["val_accuracy"].append(acc)
             history["val_auc"].append(auc)
+            history["val_pr_auc"].append(pr_auc)
             logger.info(
-                "Epoch %d/%d | Train: %.4f | Val Loss: %.4f | Acc: %.3f | AUC: %.3f",
-                epoch + 1, epochs, avg_train, avg_val, acc, auc,
+                "Epoch %d/%d | Train: %.4f | Val Loss: %.4f | Acc: %.3f | AUC: %.3f | PR-AUC: %.3f",
+                epoch + 1, epochs, avg_train, avg_val, acc, auc, pr_auc,
             )
         else:
             logger.info(
@@ -117,14 +148,39 @@ def train_model(
             )
 
         # Guardar mejor modelo por AUC (más relevante que val_loss con datos desbalanceados)
-        if model.task == "classification" and auc > best_val_auc:
-            best_val_auc = auc
+        if model.task == "classification":
+            if auc > best_val_auc:
+                best_val_auc = auc
+                best_epoch = epoch + 1
+                no_improve_epochs = 0
+                metric_improved = True
+                torch.save(model.state_dict(), save_path / "best_market_model.pt")
+            else:
+                no_improve_epochs += 1
+        elif avg_val < best_val_loss:
+            best_val_loss = avg_val
+            best_epoch = epoch + 1
+            no_improve_epochs = 0
+            metric_improved = True
             torch.save(model.state_dict(), save_path / "best_market_model.pt")
-        elif model.task != "classification" and avg_val < float("inf"):
-            torch.save(model.state_dict(), save_path / "best_market_model.pt")
+        else:
+            no_improve_epochs += 1
+
+        if effective_patience is not None and not metric_improved and no_improve_epochs >= effective_patience:
+            logger.info(
+                "Early stopping en época %d (patience=%d).",
+                epoch + 1,
+                effective_patience,
+            )
+            break
 
     # Guardar último modelo e historial
     torch.save(model.state_dict(), save_path / "last_market_model.pt")
+    history["best_epoch"] = best_epoch
+    if model.task == "classification":
+        history["best_val_auc"] = best_val_auc
+    else:
+        history["best_val_loss"] = best_val_loss
     with open(save_path / "training_history.json", "w") as f:
         json.dump(history, f, indent=2)
 
@@ -147,6 +203,11 @@ def main():
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--val-split", type=float, default=None)
+    parser.add_argument("--test-split", type=float, default=None)
+    parser.add_argument("--split-strategy", choices=["random", "temporal"], default=None)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--patience", type=int, default=None)
     parser.add_argument("--task", choices=["classification", "regression"], default=None)
     args = parser.parse_args()
 
@@ -158,15 +219,33 @@ def main():
     data_cfg = cfg.get("data", {})
 
     data_dir = args.data_dir or data_cfg.get("processed_dir", "data/processed")
-    save_dir = args.save_dir or training_cfg.get("save_dir", "data/models")
+    save_dir = args.save_dir or training_cfg.get("save_dir", "data/models/market_value_baseline")
     epochs = args.epochs or training_cfg.get("epochs", 50)
     lr = args.lr or training_cfg.get("learning_rate", 1e-3)
     batch_size = args.batch_size or training_cfg.get("batch_size", 64)
+    val_split = args.val_split if args.val_split is not None else training_cfg.get("val_split", 0.15)
+    test_split = args.test_split if args.test_split is not None else training_cfg.get("test_split", 0.15)
+    split_strategy = args.split_strategy or training_cfg.get("split_strategy", "random")
+    seed = args.seed if args.seed is not None else training_cfg.get("seed", 42)
+    patience = args.patience if args.patience is not None else training_cfg.get("patience", 0)
     task = args.task or model_cfg.get("task", "classification")
 
     logger.info("Config cargada desde %s", args.config)
-    logger.info("  data_dir=%s, save_dir=%s, epochs=%d, lr=%s, batch_size=%d, task=%s",
-                data_dir, save_dir, epochs, lr, batch_size, task)
+    logger.info(
+        "  data_dir=%s, save_dir=%s, epochs=%d, lr=%s, batch_size=%d, "
+        "task=%s, split_strategy=%s, val_split=%.3f, test_split=%.3f, seed=%d, patience=%s",
+        data_dir,
+        save_dir,
+        epochs,
+        lr,
+        batch_size,
+        task,
+        split_strategy,
+        val_split,
+        test_split,
+        seed,
+        patience,
+    )
 
     # Cargar datos
     logger.info("Cargando dataset...")
@@ -174,14 +253,19 @@ def main():
     logger.info("  Samples: %d", len(dataset))
     logger.info("  Positivos: %d", int(dataset.labels.sum()))
     logger.info("  Negativos: %d", len(dataset) - int(dataset.labels.sum()))
-    if dataset.timestamps is not None:
-        logger.info("  Timestamps disponibles: temporal split habilitado.")
-    else:
-        logger.warning("  No hay timestamps: se usará random split.")
+    if split_strategy == "temporal" and dataset.timestamps is None:
+        raise ValueError(
+            "split_strategy='temporal' requiere end_dates.npy en el dataset."
+        )
 
-    use_temporal = dataset.timestamps is not None
-    train_loader, val_loader = create_dataloaders(
-        dataset, batch_size=batch_size, temporal_split=use_temporal
+    train_loader, val_loader, test_loader, split_metadata = create_train_val_test_dataloaders(
+        dataset,
+        batch_size=batch_size,
+        val_split=val_split,
+        test_split=test_split,
+        use_weighted_sampler=training_cfg.get("use_weighted_sampler", True),
+        split_strategy=split_strategy,
+        seed=seed,
     )
 
     # Crear modelo
@@ -204,8 +288,94 @@ def main():
         val_loader,
         epochs=epochs,
         lr=lr,
+        patience=patience,
         save_dir=save_dir,
     )
+
+    save_path = Path(save_dir)
+    run_config = {
+        "data_dir": data_dir,
+        "save_dir": save_dir,
+        "epochs": epochs,
+        "learning_rate": lr,
+        "batch_size": batch_size,
+        "task": task,
+        "seed": seed,
+        "patience": patience,
+        "split": split_metadata,
+        "model": {
+            "num_categories": model_cfg.get("num_categories", 10),
+            "category_embed_dim": model_cfg.get("category_embed_dim", 8),
+            "hidden_dims": model_cfg.get("hidden_dims", [256, 128, 64]),
+            "dropout": model_cfg.get("dropout", 0.3),
+        },
+    }
+    with open(save_path / "run_config.json", "w", encoding="utf-8") as f:
+        json.dump(run_config, f, indent=2)
+
+    if test_loader is not None:
+        best_model = MarketValueNet(
+            num_numerical_features=dataset.numerical.shape[1],
+            num_categories=model_cfg.get("num_categories", 10),
+            category_embed_dim=model_cfg.get("category_embed_dim", 8),
+            text_embed_dim=dataset.text_emb.shape[1],
+            hidden_dims=model_cfg.get("hidden_dims", [256, 128, 64]),
+            dropout=model_cfg.get("dropout", 0.3),
+            task=task,
+        )
+        best_model.load_state_dict(
+            torch.load(save_path / "best_market_model.pt", map_location="cpu", weights_only=True)
+        )
+        val_results = evaluate_model(best_model, val_loader, threshold=0.5)
+        threshold_tuning = find_best_threshold(
+            val_results["labels"],
+            val_results["scores"],
+            objective="f1",
+        )
+        test_default = evaluate_model(best_model, test_loader, threshold=0.5)
+        test_tuned = evaluate_model(
+            best_model,
+            test_loader,
+            threshold=threshold_tuning["threshold"],
+        )
+        serializable_test_metrics = {
+            "default_threshold": {
+                key: value
+                for key, value in test_default.items()
+                if key not in {"scores", "labels", "predictions", "confusion_matrix"}
+            },
+            "tuned_threshold": {
+                key: value
+                for key, value in test_tuned.items()
+                if key not in {"scores", "labels", "predictions", "confusion_matrix"}
+            },
+            "threshold_tuning": threshold_tuning,
+        }
+        serializable_test_metrics["default_threshold"]["confusion_matrix"] = test_default["confusion_matrix"].tolist()
+        serializable_test_metrics["tuned_threshold"]["confusion_matrix"] = test_tuned["confusion_matrix"].tolist()
+        serializable_test_metrics = _to_json_serializable(serializable_test_metrics)
+        with open(save_path / "test_metrics.json", "w", encoding="utf-8") as f:
+            json.dump(serializable_test_metrics, f, indent=2)
+
+        logger.info(
+            "Test default thr=0.50 | Acc: %.3f | Precision: %.3f | Recall: %.3f | F1: %.3f | AUC: %.3f | PR-AUC: %.3f",
+            serializable_test_metrics["default_threshold"].get("accuracy", 0.0),
+            serializable_test_metrics["default_threshold"].get("precision", 0.0),
+            serializable_test_metrics["default_threshold"].get("recall", 0.0),
+            serializable_test_metrics["default_threshold"].get("f1", 0.0),
+            serializable_test_metrics["default_threshold"].get("roc_auc", 0.0),
+            serializable_test_metrics["default_threshold"].get("pr_auc", 0.0),
+        )
+        logger.info(
+            "Test tuned thr=%.3f | Acc: %.3f | Precision: %.3f | Recall: %.3f | F1: %.3f | AUC: %.3f | PR-AUC: %.3f",
+            serializable_test_metrics["tuned_threshold"].get("threshold", 0.5),
+            serializable_test_metrics["tuned_threshold"].get("accuracy", 0.0),
+            serializable_test_metrics["tuned_threshold"].get("precision", 0.0),
+            serializable_test_metrics["tuned_threshold"].get("recall", 0.0),
+            serializable_test_metrics["tuned_threshold"].get("f1", 0.0),
+            serializable_test_metrics["tuned_threshold"].get("roc_auc", 0.0),
+            serializable_test_metrics["tuned_threshold"].get("pr_auc", 0.0),
+        )
 
 
 if __name__ == "__main__":
