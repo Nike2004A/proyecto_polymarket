@@ -4,12 +4,14 @@ __all__ = [
     "MarketValueNet",
     "PolymarketDataset",
     "create_dataloaders",
+    "create_train_val_test_dataloaders",
     "train_model",
     "evaluate_model",
     "backtest",
     "PriceSequenceGRU",
     "TimeSeriesMarketDataset",
     "create_ts_dataloaders",
+    "create_ts_train_val_test_dataloaders",
     "evaluate_ts_model",
     "train_ts_model",
 ]
@@ -20,12 +22,17 @@ def __getattr__(name: str):
         from .architecture import MarketValueNet
 
         return MarketValueNet
-    if name in {"PolymarketDataset", "create_dataloaders"}:
-        from .dataset import PolymarketDataset, create_dataloaders
+    if name in {"PolymarketDataset", "create_dataloaders", "create_train_val_test_dataloaders"}:
+        from .dataset import (
+            PolymarketDataset,
+            create_dataloaders,
+            create_train_val_test_dataloaders,
+        )
 
         return {
             "PolymarketDataset": PolymarketDataset,
             "create_dataloaders": create_dataloaders,
+            "create_train_val_test_dataloaders": create_train_val_test_dataloaders,
         }[name]
     if name in {"train_model"}:
         from .train import train_model
@@ -42,12 +49,21 @@ def __getattr__(name: str):
         from .ts_architecture import PriceSequenceGRU
 
         return PriceSequenceGRU
-    if name in {"TimeSeriesMarketDataset", "create_ts_dataloaders"}:
-        from .ts_dataset import TimeSeriesMarketDataset, create_ts_dataloaders
+    if name in {
+        "TimeSeriesMarketDataset",
+        "create_ts_dataloaders",
+        "create_ts_train_val_test_dataloaders",
+    }:
+        from .ts_dataset import (
+            TimeSeriesMarketDataset,
+            create_ts_dataloaders,
+            create_ts_train_val_test_dataloaders,
+        )
 
         return {
             "TimeSeriesMarketDataset": TimeSeriesMarketDataset,
             "create_ts_dataloaders": create_ts_dataloaders,
+            "create_ts_train_val_test_dataloaders": create_ts_train_val_test_dataloaders,
         }[name]
     if name == "evaluate_ts_model":
         from .ts_evaluate import evaluate_ts_model
