@@ -229,7 +229,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Score active markets with PriceSequenceGRU")
     parser.add_argument("--config", default="config/config.yaml")
-    parser.add_argument("--model-path", default="data/models/ts_gru/best_ts_gru_model.pt")
+    parser.add_argument("--model-path", default="data/models/price_sequence_gru/best_ts_gru_model.pt")
     parser.add_argument("--raw-dir", default=None)
     parser.add_argument("--top", type=int, default=None)
     parser.add_argument("--max-markets", type=int, default=None)

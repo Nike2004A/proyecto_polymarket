@@ -243,7 +243,7 @@ def main():
     )
 
     parser = argparse.ArgumentParser(description="Score Active Markets")
-    parser.add_argument("--model-path", default="data/models/best_market_model.pt")
+    parser.add_argument("--model-path", default="data/models/market_value_baseline/best_market_model.pt")
     parser.add_argument("--pipeline-dir", default="data/processed/pipeline")
     parser.add_argument("--top", type=int, default=20)
     parser.add_argument("--max-markets", type=int, default=1000)
