@@ -1,5 +1,5 @@
 {
-  "num_samples": 8898,
+  "num_samples": 19429,
   "seq_len": 64,
   "min_points": 5,
   "num_features": 3,
@@ -9,10 +9,11 @@
     "delta_time_scaled"
   ],
   "snapshot_offset_days": 7,
+  "adaptive_cutoff": true,
   "skipped": {
-    "no_sequence": 14860,
-    "ambiguous": 242,
+    "no_sequence": 3986,
+    "ambiguous": 585,
     "missing_end_date": 0
   },
-  "retention_rate": 0.37075
+  "retention_rate": 0.8095416666666667
 }
