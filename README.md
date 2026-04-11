@@ -1,6 +1,6 @@
 # Polymarket ML Trading Signal Analyzer
 
-Sistema end-to-end en Python que consume la API de Polymarket, extrae features de mercados de predicción, entrena un modelo con PyTorch para identificar oportunidades de compra (mercados infravalorados) y presenta los resultados en Jupyter Notebooks interactivos con visualizaciones.
+Sistema end-to-end en Python que consume la API de Polymarket, extrae features de mercados de predicción, entrena dos modelos con PyTorch (Wide & Deep + GRU) para identificar oportunidades de compra (mercados infravalorados) y presenta los resultados en Jupyter Notebooks interactivos con visualizaciones.
 
 ## Estado del pipeline
 
@@ -65,6 +65,8 @@ polymarket-ml-analyzer/
 │   │   ├── dataset.py             # PolymarketDataset + temporal DataLoaders
 │   │   ├── train.py               # Training loop (AdamW + CosineAnnealing)
 │   │   ├── evaluate.py            # Métricas, confusion matrix, backtesting
+│   │   ├── metrics.py             # Funciones de métricas compartidas
+│   │   ├── splits.py              # Lógica de splits train/val/test (random + temporal)
 │   │   ├── ts_architecture.py     # PriceSequenceGRU
 │   │   ├── ts_dataset.py          # Dataset TS + temporal DataLoaders
 │   │   ├── ts_train.py            # Entrenamiento reproducible con early stopping
@@ -96,9 +98,11 @@ polymarket-ml-analyzer/
 │   └── models/
 │       ├── market_value_baseline/ # Checkpoints del modelo baseline (Wide & Deep)
 │       └── price_sequence_gru/    # Checkpoints del modelo GRU (temporal split)
+├── tests/
+│   ├── test_ts_gru.py             # Tests del modelo GRU (arquitectura, forward pass)
+│   └── test_model_splits.py       # Tests de los splits train/val/test
 ├── figures/                       # Gráficas exportadas desde notebooks
-├── requirements.txt
-└── setup.py
+└── requirements.txt
 ```
 
 ## Instalacion
@@ -117,7 +121,7 @@ pip install -r requirements.txt
 
 | Paquete | Uso |
 |---|---|
-| `torch` | Modelo MarketValueNet (Wide & Deep) |
+| `torch` | Modelos MarketValueNet (Wide & Deep) y PriceSequenceGRU |
 | `pandas`, `numpy` | Manipulación de datos |
 | `scikit-learn` | Métricas, scaler |
 | `sentence-transformers` | Embeddings semánticos de preguntas (MiniLM-L6-v2) |
@@ -127,7 +131,33 @@ pip install -r requirements.txt
 
 ## Uso
 
-### Ejecucion completa via CLI
+### Pipeline completo con `run.py`
+
+```bash
+# Todo el pipeline de principio a fin
+python run.py
+
+# Solo algunos pasos
+python run.py --steps fetch,features,train
+
+# Todo menos la descarga (datos ya en disco)
+python run.py --skip fetch
+
+# Solo el flujo GRU (features_ts + train_ts)
+python run.py --only gru
+
+# Forzar reentrenamiento aunque los modelos ya existan
+python run.py --steps train,train_ts --force
+
+# Solo ejecutar los notebooks (genera figuras y outputs)
+python run.py --steps notebooks
+```
+
+Pasos disponibles en orden: `fetch → features → features_ts → train → train_ts → notebooks → score`
+
+Cada paso verifica si sus artefactos ya existen y los salta automáticamente. Usa `--force` para reejecutar.
+
+### Ejecucion manual paso a paso
 
 ```bash
 # 1. Descargar datos (incremental, retomable si se interrumpe)
@@ -174,13 +204,13 @@ Los notebooks están diseñados para ejecutarse en orden:
 9. **05_1_ts_live_scoring** — Scoring en vivo y backtest-style del segundo modelo TS
 10. **05_2_model_comparison** — Comparación explícita baseline vs PriceSequenceGRU
 
-### Nuevo esquema de evaluación
+### Esquema de evaluación
 
-- Los scripts de entrenamiento por CLI ahora separan `train/val/test`.
-- `train` ajusta pesos, `val` selecciona el mejor checkpoint, `test` se evalúa una sola vez al final.
-- El split por default es `random` estratificado con `val_split=0.15` y `test_split=0.15`.
-- Si quieres una validación más realista para despliegue, puedes usar `--split-strategy temporal`.
-- `patience=0` desactiva early stopping; aun así se guarda el mejor checkpoint por `val AUC`.
+- Ambos scripts separan `train/val/test` (70/15/15 por defecto).
+- `train` ajusta pesos, `val` selecciona el mejor checkpoint por AUC, `test` se evalúa una sola vez al final.
+- El baseline usa `split_strategy: random` por defecto; el GRU usa `temporal` (ver `config/config.yaml`).
+- `--split-strategy temporal` ordena los mercados por `endDate` — train=más viejos, test=más recientes. Evaluación más realista para despliegue.
+- `patience=0` desactiva early stopping; el mejor checkpoint por `val AUC` se guarda igualmente.
 
 ## Dataset procesado
 
@@ -332,7 +362,8 @@ No se requiere autenticacion. Rate limit: 0.2 s entre llamadas.
 | Resueltos | 24,000 | con historial de precios completo |
 | Historiales | 24,900 | unión exacta (sin solapamiento) |
 | Order books | 900 | uno por mercado activo |
-| **Training set** | **22,478** | resueltos con snapshot válido + label claro |
+| **Training set baseline** | **22,478** | resueltos con snapshot válido + label claro |
+| **Training set GRU** | **19,429** | resueltos con secuencia TS válida (≥5 puntos) + label claro |
 
 ## Hiperparámetros clave
 
