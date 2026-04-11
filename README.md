@@ -5,10 +5,12 @@ Sistema end-to-end en Python que consume la API de Polymarket, extrae features d
 ## Estado del pipeline
 
 ```
-[✓] Ingesta de datos      — src/data/ + notebooks/00, 01
-[✓] Feature engineering   — src/features/ + data/processed/
-[ ] Entrenamiento         — src/model/ + notebook 04
-[ ] Scoring en vivo       — src/scoring/ + notebook 05
+[✓] Ingesta de datos          — src/data/ + notebooks/00, 01
+[✓] Feature engineering       — src/features/ + data/processed/   (22,478 muestras)
+[✓] Pipeline TS               — src/features/ts_* + data/processed_ts/  (19,429 muestras, cutoff adaptivo)
+[✓] Entrenamiento baseline    — src/model/train.py + notebook 04   (AUC-ROC 0.979, temporal split)
+[✓] Entrenamiento GRU         — src/model/ts_train.py + notebook 04_1  (AUC-ROC 0.896, temporal split)
+[✓] Scoring + comparación     — notebooks 05, 05_1, 05_2
 ```
 
 ## Arquitectura del Pipeline
@@ -91,8 +93,9 @@ polymarket-ml-analyzer/
 │   │   └── fetch_metadata.json    #   Stats del último fetch
 │   ├── processed/                 # Features procesadas (.npy) — generadas por el pipeline
 │   ├── processed_ts/              # Secuencias procesadas para PriceSequenceGRU
-│   └── models/                    # Checkpoints del modelo (.pt)
-│       └── ts_gru/                # Checkpoints del segundo modelo TS
+│   └── models/
+│       ├── market_value_baseline/ # Checkpoints del modelo baseline (Wide & Deep)
+│       └── price_sequence_gru/    # Checkpoints del modelo GRU (temporal split)
 ├── figures/                       # Gráficas exportadas desde notebooks
 ├── requirements.txt
 └── setup.py
@@ -139,11 +142,11 @@ python -m src.features.pipeline
 # 3. Construir dataset TS (produce data/processed_ts/*.npy)
 python -m src.features.ts_pipeline
 
-# 4. Entrenar modelo baseline
-python -m src.model.train --data-dir data/processed --epochs 50 --batch-size 64
+# 4. Entrenar modelo baseline (split temporal, guarda mejor checkpoint por val AUC)
+python -m src.model.train --data-dir data/processed --epochs 60 --batch-size 64 --split-strategy temporal
 
-# 5. Entrenar modelo TS
-python -m src.model.ts_train --data-dir data/processed_ts --epochs 50 --batch-size 64
+# 5. Entrenar modelo GRU (split temporal recomendado para evaluación realista)
+python -m src.model.ts_train --data-dir data/processed_ts --epochs 80 --batch-size 128 --split-strategy temporal
 
 # 6. Scoring de mercados activos (top 20 oportunidades)
 python -m src.scoring.scorer --top 20
@@ -171,6 +174,14 @@ Los notebooks están diseñados para ejecutarse en orden:
 9. **05_1_ts_live_scoring** — Scoring en vivo y backtest-style del segundo modelo TS
 10. **05_2_model_comparison** — Comparación explícita baseline vs PriceSequenceGRU
 
+### Nuevo esquema de evaluación
+
+- Los scripts de entrenamiento por CLI ahora separan `train/val/test`.
+- `train` ajusta pesos, `val` selecciona el mejor checkpoint, `test` se evalúa una sola vez al final.
+- El split por default es `random` estratificado con `val_split=0.15` y `test_split=0.15`.
+- Si quieres una validación más realista para despliegue, puedes usar `--split-strategy temporal`.
+- `patience=0` desactiva early stopping; aun así se guarda el mejor checkpoint por `val AUC`.
+
 ## Dataset procesado
 
 El pipeline de features produce los siguientes archivos en `data/processed/`:
@@ -192,15 +203,17 @@ El pipeline TS produce los siguientes artefactos en `data/processed_ts/`:
 
 | Archivo | Shape | Descripción |
 |---|---|---|
-| `sequences.npy` | (N, 64, 3) | Secuencias left-padded con `price_yes`, `delta_price`, `delta_time_scaled` |
-| `sequence_lengths.npy` | (N,) | Longitud real de cada secuencia |
-| `labels.npy` | (N,) | Misma definición de label del baseline |
-| `end_dates.npy` | (N,) | Timestamps para split temporal |
-| `market_ids.npy` | (N,) | IDs de mercado para comparación |
-| `snapshot_prices.npy` | (N,) | Último precio válido dentro del cutoff TS |
+| `sequences.npy` | (19429, 64, 3) | Secuencias left-padded con `price_yes`, `delta_price`, `delta_time_scaled` |
+| `sequence_lengths.npy` | (19429,) | Longitud real de cada secuencia |
+| `labels.npy` | (19429,) | Misma definición de label del baseline — 31.9% positivos |
+| `end_dates.npy` | (19429,) | Timestamps para split temporal |
+| `market_ids.npy` | (19429,) | IDs de mercado para comparación |
+| `snapshot_prices.npy` | (19429,) | Último precio válido dentro del cutoff TS |
 | `metadata.json` | — | Configuración del pipeline TS y stats de retención |
 
-Este dataset usa solo puntos `t <= snapshot_time`, con `snapshot_time = endDate - 7 días`, secuencias de hasta 64 observaciones y un mínimo de 5 puntos válidos por mercado.
+De los 24,000 mercados resueltos, 19,429 producen secuencias válidas (81.0%). Los 4,571 descartados son: 3,986 con < 5 puntos totales (mercados de vida < 2 días, irrecuperables) + 585 con resolución ambigua.
+
+El pipeline usa **cutoff adaptivo** (`adaptive_cutoff: true`): cutoff primario a `endDate − 7d`; para mercados de vida corta que no tienen 5 puntos antes de ese cutoff, fallback a todos los puntos antes del `endDate`. Esto recupera ~10,500 mercados adicionales respecto a usar solo el cutoff estricto.
 
 ## Modelo: MarketValueNet
 
@@ -260,9 +273,10 @@ El proyecto incluye una segunda familia de modelo, separada del baseline:
 
 - **Tipo**: clasificador puro de series de tiempo
 - **Entrada**: secuencia `(64, 3)` con `price_yes`, `delta_price`, `delta_time_scaled`
-- **Encoder**: `GRU` unidireccional (`hidden_dim=64`, `num_layers=1`)
-- **Head**: `64 -> 32 -> 1` con `dropout=0.2`
+- **Encoder**: `GRU` unidireccional (`hidden_dim=128`, `num_layers=2`)
+- **Head**: `128 -> 32 -> 1` con `dropout=0.3`
 - **Salida**: `sigmoid` para score de clasificación
+- **Entrenado con**: 19,429 muestras, split temporal, batch_size=128
 
 Este modelo **no reemplaza** a `MarketValueNet`. Su propósito es:
 
@@ -277,6 +291,17 @@ Este modelo **no reemplaza** a `MarketValueNet`. Su propósito es:
 - la comparación contra `MarketValueNet` sea limpia
 - el valor incremental de la trayectoria temporal sea medible
 - el live scoring del segundo modelo siga siendo portable y simple: solo requiere `price_histories`
+
+## Resultados de entrenamiento
+
+Evaluación sobre test set (split temporal, mercados más recientes):
+
+| Modelo | Dataset | AUC-ROC | PR-AUC | F1 | Precisión | Recall |
+|---|---|---|---|---|---|---|
+| **MarketValueNet** (Wide & Deep) | 22,478 muestras | **0.979** | **0.943** | **0.836** | **0.778** | 0.904 |
+| **PriceSequenceGRU** | 19,429 muestras | 0.896 | 0.622 | 0.641 | 0.505 | **0.878** |
+
+El baseline supera al GRU porque sus 23 features ya encapsulan la información de la trayectoria (momentum_7d, volatility_7d, trend_slope, etc.). El GRU aprende exclusivamente desde la secuencia cruda y es útil como contraste y para scoring en contextos donde solo se dispone del historial de precios.
 
 ## Hallazgos del EDA
 
@@ -331,7 +356,7 @@ Controla cuántos días antes del `endDate` se toma el snapshot de precio que de
 | **3** | Snapshot más cercano a resolución | Más mercados con secuencias válidas, mayor riesgo de leakage |
 | **0** | Usa precio final (leakage total) | No recomendado |
 
-> **Nota GRU**: el cutoff en el GRU es **estricto** — solo se usan puntos de precio con `t ≤ endDate − offset`. No hay fallback adaptivo. Un valor más bajo aumenta el dataset TS pero reduce el margen de anti-leakage.
+> **Nota GRU**: el cutoff en el GRU usa el mismo fallback adaptivo que el baseline. Cutoff primario: `t ≤ endDate − offset`. Para mercados de vida corta, fallback a todos los puntos con `t ≤ endDate`. Configurable con `adaptive_cutoff: true/false` en `config.yaml`.
 
 > **Nota baseline**: el pipeline de features usa un fallback adaptivo para mercados de vida corta. El `snapshot_offset_days` define el target primario; para mercados que vivieron menos que el offset, se usa el último precio disponible antes del `endDate` con `0 < precio < 1`.
 
