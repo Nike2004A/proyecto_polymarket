@@ -1,0 +1,52 @@
+{
+  "data_dir": "data/processed_ts",
+  "save_dir": "data/models/price_sequence_gru",
+  "epochs": 80,
+  "learning_rate": 0.001,
+  "batch_size": 128,
+  "patience": 10,
+  "seed": 42,
+  "split": {
+    "strategy": "temporal",
+    "seed": 42,
+    "val_split": 0.15,
+    "test_split": 0.15,
+    "train_size": 13601,
+    "val_size": 2914,
+    "test_size": 2914,
+    "temporal_cutoffs": {
+      "val_start_timestamp": 1775423700,
+      "test_start_timestamp": 1775718000
+    },
+    "class_balance": {
+      "train_positive_rate": 0.3324020206928253,
+      "val_positive_rate": 0.3754289746284485,
+      "test_positive_rate": 0.2024708241224289
+    }
+  },
+  "dataset_metadata": {
+    "num_samples": 19429,
+    "seq_len": 64,
+    "min_points": 5,
+    "num_features": 3,
+    "feature_names": [
+      "price_yes",
+      "delta_price",
+      "delta_time_scaled"
+    ],
+    "snapshot_offset_days": 7,
+    "adaptive_cutoff": true,
+    "skipped": {
+      "no_sequence": 3986,
+      "ambiguous": 585,
+      "missing_end_date": 0
+    },
+    "retention_rate": 0.8095416666666667
+  },
+  "model": {
+    "input_dim": 3,
+    "hidden_dim": 128,
+    "num_layers": 2,
+    "dropout": 0.3
+  }
+}

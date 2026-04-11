@@ -1,0 +1,49 @@
+{
+  "default_threshold": {
+    "threshold": 0.5,
+    "accuracy": 0.9127855235835064,
+    "precision": 0.7780082987551867,
+    "recall": 0.9036144578313253,
+    "f1": 0.8361204013377926,
+    "pr_auc": 0.942834468850521,
+    "roc_auc": 0.9784858442032592,
+    "classification_report": "              precision    recall  f1-score   support\n\n      No Buy     0.9668    0.9158    0.9406      2541\n         Buy     0.7780    0.9036    0.8361       830\n\n    accuracy                         0.9128      3371\n   macro avg     0.8724    0.9097    0.8884      3371\nweighted avg     0.9203    0.9128    0.9149      3371\n",
+    "confusion_matrix": [
+      [
+        2327,
+        214
+      ],
+      [
+        80,
+        750
+      ]
+    ]
+  },
+  "tuned_threshold": {
+    "threshold": 0.4190514087677002,
+    "accuracy": 0.9092257490358944,
+    "precision": 0.7630522088353414,
+    "recall": 0.9156626506024096,
+    "f1": 0.8324205914567361,
+    "pr_auc": 0.942834468850521,
+    "roc_auc": 0.9784858442032592,
+    "classification_report": "              precision    recall  f1-score   support\n\n      No Buy     0.9705    0.9071    0.9378      2541\n         Buy     0.7631    0.9157    0.8324       830\n\n    accuracy                         0.9092      3371\n   macro avg     0.8668    0.9114    0.8851      3371\nweighted avg     0.9194    0.9092    0.9118      3371\n",
+    "confusion_matrix": [
+      [
+        2305,
+        236
+      ],
+      [
+        70,
+        760
+      ]
+    ]
+  },
+  "threshold_tuning": {
+    "threshold": 0.4190514087677002,
+    "objective": "f1",
+    "objective_value": 0.8260729267505648,
+    "precision_at_threshold": 0.7243916242218449,
+    "recall_at_threshold": 0.960960960960961
+  }
+}

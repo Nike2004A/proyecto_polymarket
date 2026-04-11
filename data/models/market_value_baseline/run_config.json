@@ -1,0 +1,38 @@
+{
+  "data_dir": "data/processed",
+  "save_dir": "data/models/baseline_temporal_v1",
+  "epochs": 60,
+  "learning_rate": 0.001,
+  "batch_size": 64,
+  "task": "classification",
+  "seed": 42,
+  "patience": 0,
+  "split": {
+    "strategy": "temporal",
+    "seed": 42,
+    "val_split": 0.15,
+    "test_split": 0.15,
+    "train_size": 15736,
+    "val_size": 3371,
+    "test_size": 3371,
+    "temporal_cutoffs": {
+      "val_start_timestamp": 1775425500,
+      "test_start_timestamp": 1775656800
+    },
+    "class_balance": {
+      "train_positive_rate": 0.3354092538356781,
+      "val_positive_rate": 0.39513498544692993,
+      "test_positive_rate": 0.246217742562294
+    }
+  },
+  "model": {
+    "num_categories": 10,
+    "category_embed_dim": 8,
+    "hidden_dims": [
+      256,
+      128,
+      64
+    ],
+    "dropout": 0.3
+  }
+}
