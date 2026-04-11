@@ -47,27 +47,34 @@ model:
 
 ts_model:
   input_dim: 3
-  hidden_dim: 64
-  num_layers: 1
-  dropout: 0.2
+  hidden_dim: 128   # era 64 — más capacidad con 19k muestras
+  num_layers: 2     # era 1
+  dropout: 0.3      # era 0.2
 
 # Training
 training:
-  epochs: 50
+  epochs: 60
   learning_rate: 0.001
   batch_size: 64
-  val_split: 0.2
+  val_split: 0.15
+  test_split: 0.15
+  split_strategy: "random"   # "random" para iteración rápida, "temporal" para evaluación más realista
+  seed: 42
+  patience: 0                # 0 = sin early stopping; se guarda igualmente el mejor checkpoint por val AUC
   weight_decay: 0.0001
   use_weighted_sampler: true
-  save_dir: "data/models"
+  save_dir: "data/models/market_value_baseline"
 
 ts_training:
-  epochs: 50
+  epochs: 80
   learning_rate: 0.001
-  batch_size: 64
-  patience: 5
+  batch_size: 128   # era 64 — mejor throughput con 19k muestras
+  val_split: 0.15
+  test_split: 0.15
+  split_strategy: "temporal" # se sobreescribe por CLI en cada run
+  patience: 0       # sin early stopping; guarda mejor checkpoint por val AUC
   seed: 42
-  save_dir: "data/models/ts_gru"
+  save_dir: "data/models/price_sequence_gru"
 
 # Scoring & Signals
 scoring:
