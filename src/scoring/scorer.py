@@ -15,6 +15,7 @@ from ..config import load_config
 from .common import (
     get_models_registry_dir,
     load_active_context,
+    load_catboost_bundle,
     load_gbdt_bundle,
     load_primary_model_info,
     load_tabular_bundle,
@@ -115,6 +116,21 @@ def score_active_markets(
                 ]).astype(np.float32)
                 raw_prob = float(model.predict_proba(feature_vector.reshape(1, -1))[0, 1])
                 calibrated_prob = float(calibrator.predict_proba([raw_prob])[0]) if calibrator is not None else raw_prob
+            elif model_name == "catboost_residual":
+                run_model_cfg = bundle["run_config"]["model"]
+                num_dim = int(run_model_cfg["num_numerical_features"])
+                text_dim = int(run_model_cfg["text_embed_dim"])
+                feature_vector = np.empty((1, num_dim + 1 + text_dim), dtype=object)
+                feature_vector[0, :num_dim] = features["numerical"].astype(np.float32)
+                feature_vector[0, num_dim] = str(features["category_id"])
+                feature_vector[0, num_dim + 1 :] = features["text_embedding"].astype(np.float32)
+                model_output = float(model.predict(feature_vector)[0])
+                raw_prob, calibrated_prob = score_model_output_to_probs(
+                    model_output,
+                    price_yes=price_yes,
+                    prediction_mode=prediction_mode,
+                    calibrator=calibrator,
+                )
             else:
                 from ..features.ts_sequence import build_live_price_sequence
 
@@ -217,6 +233,8 @@ def load_bundle_by_name(name: str, models_root: str | Path, pipeline_dir: str | 
         return load_ts_bundle(models_path / "price_sequence_gru", pipeline_dir)
     if name == "hist_gradient_boosting":
         return load_gbdt_bundle(models_path / "hist_gradient_boosting", pipeline_dir)
+    if name == "catboost_residual":
+        return load_catboost_bundle(models_path / "catboost_residual", pipeline_dir)
     raise ValueError(f"Modelo no soportado: {name}")
 
 
@@ -250,7 +268,7 @@ def main() -> None:
 
     model_names: list[str]
     if args.all_models:
-        model_names = ["market_value_baseline", "price_sequence_gru", "hist_gradient_boosting"]
+        model_names = ["market_value_baseline", "price_sequence_gru", "hist_gradient_boosting", "catboost_residual"]
     else:
         primary = load_primary_model_info(models_root)
         model_names = [primary["name"]] if primary else ["hist_gradient_boosting"]

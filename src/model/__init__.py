@@ -2,6 +2,7 @@
 
 from .architecture import MarketValueNet
 from .calibration import ProbabilityCalibrator
+from .catboost_train import train_catboost_pipeline
 from .dataset import PolymarketDataset, create_train_val_test_dataloaders
 from .evaluate import evaluate_model
 from .gbdt_train import train_gbdt_pipeline
@@ -17,6 +18,7 @@ __all__ = [
     "PolymarketDataset",
     "create_train_val_test_dataloaders",
     "evaluate_model",
+    "train_catboost_pipeline",
     "train_gbdt_pipeline",
     "train_model",
     "train_tabular_pipeline",

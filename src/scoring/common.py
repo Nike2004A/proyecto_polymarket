@@ -9,6 +9,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import torch
+from catboost import CatBoostRegressor
 
 from ..data.snapshots import PreparedHistory, latest_price_before, prepare_history_map
 from ..features.pipeline import FeaturePipeline
@@ -150,6 +151,26 @@ def load_gbdt_bundle(model_dir: str | Path, pipeline_dir: str | Path) -> dict:
         "pipeline": pipeline,
         "calibrator": calibrator,
         "prediction_mode": run_config.get("prediction_mode", "classification_probability"),
+        "run_config": run_config,
+    }
+
+
+def load_catboost_bundle(model_dir: str | Path, pipeline_dir: str | Path) -> dict:
+    model_path = Path(model_dir)
+    with open(model_path / "run_config.json", encoding="utf-8") as f:
+        run_config = json.load(f)
+
+    pipeline = FeaturePipeline.load(str(pipeline_dir))
+    model = CatBoostRegressor()
+    model.load_model(model_path / "catboost_model.cbm")
+    calibration_dir = model_path / "calibration"
+    calibrator = ProbabilityCalibrator.load(calibration_dir) if calibration_dir.exists() else None
+    return {
+        "model_name": "catboost_residual",
+        "model": model,
+        "pipeline": pipeline,
+        "calibrator": calibrator,
+        "prediction_mode": run_config.get("prediction_mode", "residual"),
         "run_config": run_config,
     }
 

@@ -15,6 +15,7 @@ import torch.nn as nn
 from ..config import load_config
 from .architecture import MarketValueNet
 from .calibration import fit_isotonic_calibrator, fit_platt_calibrator, identity_calibrator
+from .catboost_train import train_catboost_pipeline
 from .dataset import PolymarketDataset, create_train_val_test_dataloaders
 from .evaluate import collect_tabular_outputs, evaluate_model
 from .gbdt_train import train_gbdt_pipeline
@@ -439,7 +440,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Train snapshot-based p_yes models")
     parser.add_argument("--config", default="config/config.yaml")
-    parser.add_argument("--only", choices=["tabular", "ts", "gbdt", "both", "all"], default="all")
+    parser.add_argument("--only", choices=["tabular", "ts", "gbdt", "catboost", "both", "all"], default="all")
     parser.add_argument("--data-dir", default=None)
     parser.add_argument("--save-dir", default=None)
     parser.add_argument("--ts-data-dir", default=None)
@@ -451,16 +452,19 @@ def main() -> None:
     tabular_summary = None
     ts_summary = None
     gbdt_summary = None
+    catboost_summary = None
     if args.only in {"tabular", "both", "all"}:
         tabular_summary = train_tabular_pipeline(cfg, data_dir=args.data_dir, save_dir=args.save_dir)
     if args.only in {"ts", "both", "all"}:
         ts_summary = train_ts_pipeline(cfg, data_dir=args.ts_data_dir, save_dir=args.ts_save_dir)
     if args.only in {"gbdt", "all"}:
         gbdt_summary = train_gbdt_pipeline(cfg, data_dir=args.data_dir)
+    if args.only in {"catboost", "all"}:
+        catboost_summary = train_catboost_pipeline(cfg, data_dir=args.data_dir)
 
-    if args.only in {"both", "all"} and any(summary is not None for summary in [tabular_summary, ts_summary, gbdt_summary]):
+    if args.only in {"both", "all"} and any(summary is not None for summary in [tabular_summary, ts_summary, gbdt_summary, catboost_summary]):
         models_root = Path(cfg.get("training", {}).get("save_dir", "data/models/market_value_baseline")).parent
-        comparison = save_model_comparison(tabular_summary, ts_summary, gbdt_summary, output_dir=models_root)
+        comparison = save_model_comparison(tabular_summary, ts_summary, gbdt_summary, catboost_summary, output_dir=models_root)
         logger.info("Primary model selected: %s", comparison["primary_model"]["name"])
 
 

@@ -15,6 +15,7 @@ sentence-transformers>=2.2
 matplotlib>=3.7
 seaborn>=0.12
 plotly>=5.15
+catboost>=1.2
 
 # Notebooks
 jupyter>=1.0
