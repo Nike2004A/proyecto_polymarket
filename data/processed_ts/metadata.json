@@ -1,19 +1,54 @@
 {
-  "num_samples": 19429,
-  "seq_len": 64,
-  "min_points": 5,
-  "num_features": 3,
-  "feature_names": [
-    "price_yes",
-    "delta_price",
-    "delta_time_scaled"
+  "num_samples": 39545,
+  "num_markets": 13373,
+  "snapshot_horizons_days": [
+    1,
+    3,
+    7,
+    14,
+    30
   ],
-  "snapshot_offset_days": 7,
-  "adaptive_cutoff": true,
+  "sequence_lookback_days": 30,
+  "sequence_grid_hours": 12,
+  "tabular_feature_names": [
+    "snapshot_price_yes",
+    "days_to_end",
+    "market_age_days_at_snapshot",
+    "days_since_last_trade",
+    "history_points_1d",
+    "history_points_3d",
+    "history_points_7d",
+    "history_points_30d",
+    "history_span_days",
+    "return_1d",
+    "return_3d",
+    "return_7d",
+    "return_14d",
+    "return_30d",
+    "realized_vol_1d",
+    "realized_vol_3d",
+    "realized_vol_7d",
+    "realized_vol_14d",
+    "realized_vol_30d",
+    "trend_slope_7d",
+    "trend_slope_30d",
+    "price_percentile_30d",
+    "distance_to_30d_min",
+    "distance_to_30d_max",
+    "neg_risk"
+  ],
+  "sequence_feature_names": [
+    "price_yes_ffill",
+    "delta_price",
+    "observed_mask"
+  ],
   "skipped": {
-    "no_sequence": 3986,
-    "ambiguous": 585,
-    "missing_end_date": 0
+    "missing_history": 0,
+    "no_valid_horizons": 10627,
+    "no_sequence": 0,
+    "ambiguous": 0
   },
-  "retention_rate": 0.8095416666666667
+  "market_positive_rate": 0.3124794661998749,
+  "target_name": "residual_yes_minus_price",
+  "benchmark": "market_price_yes"
 }
