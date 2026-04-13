@@ -1,0 +1,5 @@
+{
+  "name": "hist_gradient_boosting",
+  "save_dir": "data/models/hist_gradient_boosting",
+  "selection_metric": "eligible_if(top_k_pnl>0 and beats_market_prob) -> top_k_avg_realized_pnl -> brier -> log_loss"
+}

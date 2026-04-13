@@ -1,0 +1,166 @@
+{
+  "data_dir": "data/processed",
+  "save_dir": "data/models/hist_gradient_boosting",
+  "prediction_mode": "classification_probability",
+  "split": {
+    "strategy": "temporal_grouped",
+    "seed": 42,
+    "val_split": 0.15,
+    "test_split": 0.15,
+    "train_size": 27683,
+    "val_size": 5935,
+    "test_size": 5927,
+    "temporal_cutoffs": {
+      "val_start_timestamp": 1775743200,
+      "test_start_timestamp": 1776528000
+    },
+    "class_balance": {
+      "train_positive_rate": 0.3186432123184204,
+      "val_positive_rate": 0.41752317547798157,
+      "test_positive_rate": 0.17850515246391296
+    }
+  },
+  "model": {
+    "type": "HistGradientBoostingClassifier",
+    "learning_rate": 0.07,
+    "max_depth": 6,
+    "max_iter": 250,
+    "min_samples_leaf": 50,
+    "l2_regularization": 0.2,
+    "category_feature_dim": 8,
+    "text_pca_dim": 16,
+    "num_numerical_features": 25
+  },
+  "calibration": {
+    "selected": "identity",
+    "tolerance": 0.005,
+    "candidates": {
+      "identity": {
+        "brier": 0.09668009559280075,
+        "log_loss": 0.27696540148275284,
+        "positive_rate": 0.4175231676495366,
+        "mean_probability": 0.41115834304698085,
+        "ece": 0.02120322709541184,
+        "roc_auc": 0.9393768430922229,
+        "pr_auc": 0.9262614347355724
+      },
+      "platt": {
+        "brier": 0.10145034805958246,
+        "log_loss": 0.3107984294066344,
+        "positive_rate": 0.4175231676495366,
+        "mean_probability": 0.41743844356369136,
+        "ece": 0.05427580673755536,
+        "roc_auc": 0.9393768430922229,
+        "pr_auc": 0.9262614347355724
+      },
+      "isotonic": {
+        "brier": 0.09389816501123303,
+        "log_loss": 0.2683871688253081,
+        "positive_rate": 0.4175231676495366,
+        "mean_probability": 0.4175232894692502,
+        "ece": 5.737152484925155e-07,
+        "roc_auc": 0.9407540186443712,
+        "pr_auc": 0.9193716266050631
+      }
+    }
+  },
+  "search_results": [
+    {
+      "model_params": {
+        "learning_rate": 0.03,
+        "max_depth": 4,
+        "max_iter": 400,
+        "min_samples_leaf": 30,
+        "l2_regularization": 0.0
+      },
+      "selected_calibration": "identity",
+      "validation": {
+        "brier": 0.09597288291803734,
+        "log_loss": 0.2750824356046931,
+        "top_k_avg_realized_pnl": 0.29222499802708624,
+        "top_k_hit_rate": 0.65
+      }
+    },
+    {
+      "model_params": {
+        "learning_rate": 0.03,
+        "max_depth": 6,
+        "max_iter": 500,
+        "min_samples_leaf": 20,
+        "l2_regularization": 0.0
+      },
+      "selected_calibration": "identity",
+      "validation": {
+        "brier": 0.0959613994900176,
+        "log_loss": 0.2754958777015348,
+        "top_k_avg_realized_pnl": 0.1902249999344349,
+        "top_k_hit_rate": 0.65
+      }
+    },
+    {
+      "model_params": {
+        "learning_rate": 0.05,
+        "max_depth": 6,
+        "max_iter": 300,
+        "min_samples_leaf": 40,
+        "l2_regularization": 0.1
+      },
+      "selected_calibration": "identity",
+      "validation": {
+        "brier": 0.09520116457130855,
+        "log_loss": 0.2732386256154046,
+        "top_k_avg_realized_pnl": 0.35049998983740804,
+        "top_k_hit_rate": 0.8
+      }
+    },
+    {
+      "model_params": {
+        "learning_rate": 0.05,
+        "max_depth": 8,
+        "max_iter": 400,
+        "min_samples_leaf": 20,
+        "l2_regularization": 0.0
+      },
+      "selected_calibration": "identity",
+      "validation": {
+        "brier": 0.09776597271528367,
+        "log_loss": 0.28054051385471596,
+        "top_k_avg_realized_pnl": 0.13724999949336053,
+        "top_k_hit_rate": 0.5
+      }
+    },
+    {
+      "model_params": {
+        "learning_rate": 0.07,
+        "max_depth": 6,
+        "max_iter": 250,
+        "min_samples_leaf": 50,
+        "l2_regularization": 0.2
+      },
+      "selected_calibration": "identity",
+      "validation": {
+        "brier": 0.09668009559280075,
+        "log_loss": 0.27696540148275284,
+        "top_k_avg_realized_pnl": 0.4377499908208847,
+        "top_k_hit_rate": 0.85
+      }
+    },
+    {
+      "model_params": {
+        "learning_rate": 0.1,
+        "max_depth": 4,
+        "max_iter": 250,
+        "min_samples_leaf": 40,
+        "l2_regularization": 0.1
+      },
+      "selected_calibration": "identity",
+      "validation": {
+        "brier": 0.09688251449847841,
+        "log_loss": 0.277364096119993,
+        "top_k_avg_realized_pnl": 0.29374999552965164,
+        "top_k_hit_rate": 0.75
+      }
+    }
+  ],
+  "selection_metric": "topk_ev"
+}

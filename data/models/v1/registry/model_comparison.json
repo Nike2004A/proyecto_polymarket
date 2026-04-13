@@ -1,0 +1,101 @@
+{
+  "models": {
+    "market_value_baseline": {
+      "save_dir": "data/models/market_value_baseline",
+      "calibration_method": "platt",
+      "test": {
+        "raw_metrics": {
+          "brier": 0.024112402773625318,
+          "log_loss": 0.10206808370030065,
+          "positive_rate": 0.17850514594229797,
+          "mean_probability": 0.19054154830549827,
+          "ece": 0.030418937754336295,
+          "roc_auc": 0.9841070450335657,
+          "pr_auc": 0.9617785584915549
+        },
+        "calibrated_metrics": {
+          "brier": 0.02606022666050341,
+          "log_loss": 0.11211436583261783,
+          "positive_rate": 0.17850514594229797,
+          "mean_probability": 0.1764410335372363,
+          "ece": 0.03781201526514869,
+          "roc_auc": 0.9841070450335657,
+          "pr_auc": 0.9617785584915549
+        },
+        "market_baseline_metrics": {
+          "brier": 0.0061812073153345365,
+          "log_loss": 0.022102250843382926,
+          "positive_rate": 0.17850514594229797,
+          "mean_probability": 0.18598759595218659,
+          "ece": 0.014829006291899899,
+          "roc_auc": 0.9999640874464855,
+          "pr_auc": 0.9998416567807198
+        },
+        "ev_metrics": {
+          "num_positive_ev": 4555,
+          "mean_predicted_ev": -0.009546562414950275,
+          "mean_realized_pnl": -0.007482450009888625,
+          "mean_expected_roi": 51.223223666029114,
+          "top_k": 20,
+          "top_k_count": 20,
+          "top_k_avg_predicted_ev": 0.1810105894835175,
+          "top_k_avg_realized_pnl": -0.09110000036307611,
+          "top_k_avg_expected_roi": 262.2587239108793,
+          "top_k_avg_realized_roi": -1.0,
+          "top_k_hit_rate": 0.0
+        }
+      }
+    },
+    "price_sequence_gru": {
+      "save_dir": "data/models/price_sequence_gru",
+      "calibration_method": "platt",
+      "test": {
+        "raw_metrics": {
+          "brier": 0.011047494028494744,
+          "log_loss": 0.05771386814438522,
+          "positive_rate": 0.17850514594229797,
+          "mean_probability": 0.1838478154965225,
+          "ece": 0.0368396523747215,
+          "roc_auc": 0.9986079517770114,
+          "pr_auc": 0.9971403104628992
+        },
+        "calibrated_metrics": {
+          "brier": 0.017605312428572648,
+          "log_loss": 0.07616873697890097,
+          "positive_rate": 0.17850514594229797,
+          "mean_probability": 0.16343191180572786,
+          "ece": 0.052158515935227356,
+          "roc_auc": 0.9986079517770114,
+          "pr_auc": 0.9971403104628992
+        },
+        "market_baseline_metrics": {
+          "brier": 0.0061812073153345365,
+          "log_loss": 0.022102250843382926,
+          "positive_rate": 0.17850514594229797,
+          "mean_probability": 0.18598759595218659,
+          "ece": 0.014829006291899899,
+          "roc_auc": 0.9999640874464855,
+          "pr_auc": 0.9998416567807198
+        },
+        "ev_metrics": {
+          "num_positive_ev": 4575,
+          "mean_predicted_ev": -0.022555684146458737,
+          "mean_realized_pnl": -0.007482450009888625,
+          "mean_expected_roi": 30.76968357934109,
+          "top_k": 20,
+          "top_k_count": 20,
+          "top_k_avg_predicted_ev": 0.106260553138528,
+          "top_k_avg_realized_pnl": 0.18684999521356077,
+          "top_k_avg_expected_roi": 42.9106672273656,
+          "top_k_avg_realized_roi": -0.0682369813388792,
+          "top_k_hit_rate": 0.65
+        }
+      }
+    }
+  },
+  "primary_model": {
+    "name": "price_sequence_gru",
+    "save_dir": "data/models/price_sequence_gru",
+    "selection_metric": "top_k_avg_realized_pnl -> brier -> log_loss"
+  }
+}

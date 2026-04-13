@@ -1,0 +1,5 @@
+{
+  "name": "price_sequence_gru",
+  "save_dir": "data/models/price_sequence_gru",
+  "selection_metric": "top_k_avg_realized_pnl -> brier -> log_loss"
+}

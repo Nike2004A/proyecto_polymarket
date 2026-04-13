@@ -1,0 +1,91 @@
+{
+  "validation": {
+    "raw_metrics": {
+      "brier": 0.10691903155281209,
+      "log_loss": 0.3146288437381623,
+      "positive_rate": 0.4175231676495366,
+      "mean_probability": 0.4811017191086665,
+      "ece": 0.0642509015779767,
+      "roc_auc": 0.9401415709618667,
+      "pr_auc": 0.9239211155000706
+    },
+    "calibrated_metrics": {
+      "brier": 0.0976657046317974,
+      "log_loss": 0.2883279750285282,
+      "positive_rate": 0.4175231676495366,
+      "mean_probability": 0.41751383921756363,
+      "ece": 0.015140215392565414,
+      "roc_auc": 0.9401415709618667,
+      "pr_auc": 0.9239211155000706
+    },
+    "market_baseline_metrics": {
+      "brier": 0.09426540878263506,
+      "log_loss": 0.2712688003244637,
+      "positive_rate": 0.4175231676495366,
+      "mean_probability": 0.4302156652959429,
+      "ece": 0.01686285276431982,
+      "roc_auc": 0.9438028325865826,
+      "pr_auc": 0.9286386917153631
+    },
+    "ev_metrics": {
+      "num_positive_ev": 3063,
+      "mean_predicted_ev": -0.012701826078379266,
+      "mean_realized_pnl": -0.01269249764640628,
+      "mean_expected_roi": 5.502240283238115,
+      "top_k": 20,
+      "top_k_count": 20,
+      "top_k_avg_predicted_ev": 0.280323640844466,
+      "top_k_avg_realized_pnl": 0.11300000250339508,
+      "top_k_avg_expected_roi": 0.48640470639857314,
+      "top_k_avg_realized_roi": 0.2339459667865531,
+      "top_k_hit_rate": 0.7
+    }
+  },
+  "test": {
+    "raw_metrics": {
+      "brier": 0.011047494028494744,
+      "log_loss": 0.05771386814438522,
+      "positive_rate": 0.17850514594229797,
+      "mean_probability": 0.1838478154965225,
+      "ece": 0.0368396523747215,
+      "roc_auc": 0.9986079517770114,
+      "pr_auc": 0.9971403104628992
+    },
+    "calibrated_metrics": {
+      "brier": 0.017605312428572648,
+      "log_loss": 0.07616873697890097,
+      "positive_rate": 0.17850514594229797,
+      "mean_probability": 0.16343191180572786,
+      "ece": 0.052158515935227356,
+      "roc_auc": 0.9986079517770114,
+      "pr_auc": 0.9971403104628992
+    },
+    "market_baseline_metrics": {
+      "brier": 0.0061812073153345365,
+      "log_loss": 0.022102250843382926,
+      "positive_rate": 0.17850514594229797,
+      "mean_probability": 0.18598759595218659,
+      "ece": 0.014829006291899899,
+      "roc_auc": 0.9999640874464855,
+      "pr_auc": 0.9998416567807198
+    },
+    "ev_metrics": {
+      "num_positive_ev": 4575,
+      "mean_predicted_ev": -0.022555684146458737,
+      "mean_realized_pnl": -0.007482450009888625,
+      "mean_expected_roi": 30.76968357934109,
+      "top_k": 20,
+      "top_k_count": 20,
+      "top_k_avg_predicted_ev": 0.106260553138528,
+      "top_k_avg_realized_pnl": 0.18684999521356077,
+      "top_k_avg_expected_roi": 42.9106672273656,
+      "top_k_avg_realized_roi": -0.0682369813388792,
+      "top_k_hit_rate": 0.65
+    }
+  },
+  "market_baseline_beaten": {
+    "brier": false,
+    "log_loss": false,
+    "top_k_realized_pnl": true
+  }
+}

@@ -6,7 +6,6 @@
   "batch_size": 256,
   "patience": 5,
   "seed": 42,
-  "prediction_mode": "residual",
   "split": {
     "strategy": "temporal_grouped",
     "seed": 42,
@@ -76,7 +75,6 @@
       "ambiguous": 0
     },
     "market_positive_rate": 0.3124794661998749,
-    "target_name": "residual_yes_minus_price",
     "benchmark": "market_price_yes"
   },
   "model": {
@@ -90,35 +88,35 @@
     "dropout": 0.2
   },
   "calibration": {
-    "selected": "isotonic",
+    "selected": "platt",
     "tolerance": 0.005,
     "candidates": {
       "identity": {
-        "brier": 0.12149379414481587,
-        "log_loss": 0.5061431634169538,
+        "brier": 0.10691903155281209,
+        "log_loss": 0.3146288437381623,
         "positive_rate": 0.4175231676495366,
-        "mean_probability": 0.3676740539763169,
-        "ece": 0.08953250166225074,
-        "roc_auc": 0.9230661116640435,
-        "pr_auc": 0.9029611207360395
+        "mean_probability": 0.4811017191086665,
+        "ece": 0.0642509015779767,
+        "roc_auc": 0.9401415709618667,
+        "pr_auc": 0.9239211155000706
       },
       "platt": {
-        "brier": 0.11835858720878371,
-        "log_loss": 0.38162796220750084,
+        "brier": 0.0976657046317974,
+        "log_loss": 0.2883279750285282,
         "positive_rate": 0.4175231676495366,
-        "mean_probability": 0.41760089309054016,
-        "ece": 0.04404621009591696,
-        "roc_auc": 0.9230661116640435,
-        "pr_auc": 0.9029611207360395
+        "mean_probability": 0.41751383921756363,
+        "ece": 0.015140215392565414,
+        "roc_auc": 0.9401415709618667,
+        "pr_auc": 0.9239211155000706
       },
       "isotonic": {
-        "brier": 0.10427230790962859,
-        "log_loss": 0.3251929467890726,
+        "brier": 0.0957577936686062,
+        "log_loss": 0.27868708233622524,
         "positive_rate": 0.4175231676495366,
-        "mean_probability": 0.41752316764953656,
-        "ece": 2.0889168893194686e-17,
-        "roc_auc": 0.9248168376944184,
-        "pr_auc": 0.8962096529957743
+        "mean_probability": 0.4175233295703454,
+        "ece": 5.00926706010746e-07,
+        "roc_auc": 0.9412171628701098,
+        "pr_auc": 0.9169017764617902
       }
     }
   },
