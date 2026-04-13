@@ -1,5 +1,8 @@
-"""Pipeline completo de feature engineering: raw market -> feature tensors."""
+"""Snapshot-based dataset builder and feature pipeline."""
 
+from __future__ import annotations
+
+import argparse
 import json
 import logging
 from pathlib import Path
@@ -8,20 +11,25 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
+from ..config import load_config
+from ..data.snapshots import build_snapshot_samples, prepare_history_map
+from .categorical import CategoryEncoder
 from .numerical import (
+    NUMERICAL_FEATURE_NAMES,
+    NUM_NUMERICAL_FEATURES,
     extract_numerical_features,
     extract_numerical_features_batch,
-    NUM_NUMERICAL_FEATURES,
-    NUMERICAL_FEATURE_NAMES,
 )
-from .categorical import CategoryEncoder
-from .text import TextEncoder, DummyTextEncoder
+from .text import DummyTextEncoder, TextEncoder
+from .ts_sequence import build_grid_sequence, SEQUENCE_FEATURE_NAMES
 
 logger = logging.getLogger(__name__)
 
 
 class FeaturePipeline:
-    """Pipeline completo que transforma mercados crudos en tensores de features."""
+    """Scaler + encoders for snapshot-based tabular features."""
+
+    _shared_text_encoder: TextEncoder | None = None
 
     def __init__(
         self,
@@ -35,15 +43,14 @@ class FeaturePipeline:
         elif use_dummy_text:
             self.text_encoder = DummyTextEncoder()
         else:
-            self.text_encoder = TextEncoder()
+            if FeaturePipeline._shared_text_encoder is None:
+                FeaturePipeline._shared_text_encoder = TextEncoder()
+            self.text_encoder = FeaturePipeline._shared_text_encoder
 
         self.category_encoder = category_encoder or CategoryEncoder()
         self.scaler = scaler or StandardScaler()
         self._fitted = False
-
-    @property
-    def num_categories(self) -> int:
-        return self.category_encoder.num_categories
+        self._text_cache: dict[str, np.ndarray] = {}
 
     @property
     def text_embed_dim(self) -> int:
@@ -53,148 +60,67 @@ class FeaturePipeline:
     def num_numerical_features(self) -> int:
         return NUM_NUMERICAL_FEATURES
 
+    @property
+    def num_categories(self) -> int:
+        return self.category_encoder.num_categories
+
     def transform_single(
         self,
         market: dict,
-        price_history: list[dict] | None = None,
-        order_book: dict | None = None,
+        price_history=None,
+        snapshot_time: pd.Timestamp | None = None,
+        days_to_end: float | None = None,
+        order_book=None,
     ) -> dict:
-        """
-        Transforma un mercado individual en features.
-
-        El mercado debe estar preprocesado (con preprocess_market_dict) para
-        que las features temporales estén calculadas.
-
-        Returns:
-            Dict con keys: numerical (np.ndarray), category_id (int),
-            text_embedding (np.ndarray).
-        """
-        from ..data.preprocessing import preprocess_market_dict
-
-        # Asegurar que el mercado tiene features temporales y derivadas
-        market = preprocess_market_dict(market)
-
-        numerical = extract_numerical_features(market, price_history, order_book)
-
+        """Transform a single live or historical market snapshot."""
+        numerical = extract_numerical_features(
+            market,
+            price_history=price_history,
+            snapshot_time=snapshot_time,
+            days_to_end=days_to_end,
+        )
         if self._fitted:
-            numerical = self.scaler.transform(numerical.reshape(1, -1)).squeeze()
+            numerical = self.scaler.transform(numerical.reshape(1, -1)).squeeze(0)
 
         category_id = self.category_encoder.encode(market)
-        question = market.get("question", "")
-        text_embedding = self.text_encoder.encode(question)
-
+        text_embedding = self._encode_market_text(market, key=str(market.get("id", market.get("question", ""))))
         return {
             "numerical": numerical.astype(np.float32),
             "category_id": int(category_id),
             "text_embedding": text_embedding.astype(np.float32),
         }
 
-    def fit_transform_batch(
-        self,
-        markets: list[dict],
-        price_histories: dict | None = None,
-        order_books: dict | None = None,
-    ) -> dict:
-        """
-        Ajusta el scaler y transforma un batch de mercados.
-
-        Args:
-            markets: Lista de dicts de mercados.
-            price_histories: Dict {market_id: [price_records]}. Si se
-                proporcionan, se usan para calcular momentum y volatilidad.
-            order_books: Dict {market_id: order_book}. Si se proporcionan,
-                se usan para calcular bid_depth, ask_depth, book_imbalance.
-
-        Returns:
-            Dict con keys: numerical (N, 23), category_ids (N,),
-            text_embeddings (N, 384).
-        """
-        from ..data.preprocessing import preprocess_market_dict
-
-        # Preprocesar cada mercado para asegurar features temporales
-        preprocessed = [preprocess_market_dict(m) for m in markets]
-
-        # Numerical features
-        markets_df = pd.DataFrame(preprocessed)
-        numerical = extract_numerical_features_batch(
-            markets_df, price_histories, order_books
-        )
-
-        # Log de features TS que quedaron en cero (probable falta de price_histories)
-        ts_features = {
-            "price_momentum_7d", "price_momentum_14d", "price_momentum_30d",
-            "price_volatility_7d", "price_volatility_30d",
-            "price_trend_slope", "ewm_momentum", "ts_coverage", "ts_days_span",
-        }
-        ob_features = {"bid_depth", "ask_depth", "book_imbalance"}
-        zero_cols = (numerical == 0).all(axis=0)
-        ts_all_zero = [
-            NUMERICAL_FEATURE_NAMES[i] for i, z in enumerate(zero_cols)
-            if z and NUMERICAL_FEATURE_NAMES[i] in ts_features
-        ]
-        ob_all_zero = [
-            NUMERICAL_FEATURE_NAMES[i] for i, z in enumerate(zero_cols)
-            if z and NUMERICAL_FEATURE_NAMES[i] in ob_features
-        ]
-        if ts_all_zero:
-            logger.warning(
-                "Features TS en cero para TODOS los mercados: %s. "
-                "Verifica que price_histories incluye los mercados resueltos.",
-                ts_all_zero,
-            )
-        if ob_all_zero:
-            logger.warning(
-                "Features de order book en cero para TODOS los mercados: %s. "
-                "order_books solo existe para mercados activos (esperado para resolved).",
-                ob_all_zero,
-            )
-
-        # Fit scaler
+    def fit_transform_batch(self, samples: list[dict]) -> dict:
+        """Fit scaler/encoders on a snapshot sample batch and transform it."""
+        markets = [sample["market"] for sample in samples]
+        numerical = extract_numerical_features_batch(samples)
         self.scaler.fit(numerical)
         numerical_scaled = self.scaler.transform(numerical).astype(np.float32)
         self._fitted = True
 
-        # Category IDs
-        category_ids = self.category_encoder.encode_batch(preprocessed)
-
-        # Text embeddings
-        text_embeddings = self.text_encoder.encode_markets(preprocessed)
-
+        category_ids = self.category_encoder.encode_batch(markets)
+        text_embeddings = self._encode_samples_text(samples)
         return {
             "numerical": numerical_scaled,
-            "category_ids": category_ids,
-            "text_embeddings": text_embeddings,
+            "category_ids": category_ids.astype(np.int64),
+            "text_embeddings": text_embeddings.astype(np.float32),
         }
 
-    def transform_batch(
-        self,
-        markets: list[dict],
-        price_histories: dict | None = None,
-        order_books: dict | None = None,
-    ) -> dict:
-        """Transforma un batch sin reajustar el scaler."""
-        from ..data.preprocessing import preprocess_market_dict
-
-        preprocessed = [preprocess_market_dict(m) for m in markets]
-        markets_df = pd.DataFrame(preprocessed)
-        numerical = extract_numerical_features_batch(
-            markets_df, price_histories, order_books
-        )
-
+    def transform_batch(self, samples: list[dict]) -> dict:
+        """Transform a batch without refitting the scaler."""
+        markets = [sample["market"] for sample in samples]
+        numerical = extract_numerical_features_batch(samples)
         if self._fitted:
             numerical = self.scaler.transform(numerical).astype(np.float32)
-
-        category_ids = self.category_encoder.encode_batch(preprocessed)
-        text_embeddings = self.text_encoder.encode_markets(preprocessed)
-
+        category_ids = self.category_encoder.encode_batch(markets)
+        text_embeddings = self._encode_samples_text(samples)
         return {
-            "numerical": numerical,
-            "category_ids": category_ids,
-            "text_embeddings": text_embeddings,
+            "numerical": numerical.astype(np.float32),
+            "category_ids": category_ids.astype(np.int64),
+            "text_embeddings": text_embeddings.astype(np.float32),
         }
 
     def save(self, directory: str) -> None:
-        """Guarda el pipeline (scaler + category encoder) en disco."""
         import joblib
 
         path = Path(directory)
@@ -203,23 +129,21 @@ class FeaturePipeline:
         self.category_encoder.save(str(path / "category_encoder.json"))
         metadata = {
             "fitted": self._fitted,
-            "num_numerical": self.num_numerical_features,
-            "num_categories": self.num_categories,
+            "num_numerical": NUM_NUMERICAL_FEATURES,
+            "num_categories": self.category_encoder.num_categories,
             "text_embed_dim": self.text_embed_dim,
             "feature_names": NUMERICAL_FEATURE_NAMES,
         }
-        with open(path / "pipeline_metadata.json", "w") as f:
+        with open(path / "pipeline_metadata.json", "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2)
 
     @classmethod
     def load(cls, directory: str, use_dummy_text: bool = False) -> "FeaturePipeline":
-        """Carga un pipeline previamente guardado."""
         import joblib
 
         path = Path(directory)
         scaler = joblib.load(path / "scaler.pkl")
         category_encoder = CategoryEncoder.load(str(path / "category_encoder.json"))
-
         pipeline = cls(
             category_encoder=category_encoder,
             scaler=scaler,
@@ -228,174 +152,300 @@ class FeaturePipeline:
         pipeline._fitted = True
         return pipeline
 
+    def warm_text_cache(self, markets: list[dict]) -> None:
+        """Batch-encode market questions to avoid per-market live scoring overhead."""
+        missing_keys: list[str] = []
+        missing_texts: list[str] = []
+        for market in markets:
+            key = str(market.get("id", market.get("question", "")))
+            if key in self._text_cache:
+                continue
+            missing_keys.append(key)
+            missing_texts.append(market.get("question", ""))
 
-def _load_auxiliary_data(input_dir: Path) -> tuple[dict, dict]:
-    """
-    Carga price_histories y order_books desde disco.
+        if not missing_keys:
+            return
 
-    Ambos archivos usan formato dict keyed por market_id:
-        price_histories.json: {market_id: [{t, p}, ...]}
-        order_books.json:     {market_id: {bids: [...], asks: [...]}}
-
-    Returns:
-        (price_histories_by_id, order_books_by_id)
-    """
-    price_histories: dict = {}
-    order_books: dict = {}
-
-    ph_path = input_dir / "price_histories.json"
-    if ph_path.exists():
-        with open(ph_path) as f:
-            price_histories = json.load(f)
-        # Asegurar que los valores son listas (filtra entradas vacías/None)
-        price_histories = {k: v for k, v in price_histories.items() if isinstance(v, list)}
-        logger.info("Cargados %d price histories.", len(price_histories))
-    else:
-        logger.warning(
-            "No se encontró %s. Features de momentum/volatilidad serán cero.",
-            ph_path,
+        embeddings = self.text_encoder.encode_batch(
+            missing_texts,
+            show_progress_bar=False,
         )
+        for key, embedding in zip(missing_keys, embeddings):
+            self._text_cache[key] = np.asarray(embedding, dtype=np.float32)
 
-    ob_path = input_dir / "order_books.json"
-    if ob_path.exists():
-        with open(ob_path) as f:
-            order_books = json.load(f)
-        if not isinstance(order_books, dict):
-            logger.warning("order_books.json no tiene formato dict. Ignorando.")
-            order_books = {}
-        logger.info("Cargados %d order books.", len(order_books))
-    else:
-        logger.warning(
-            "No se encontró %s. Features de order book serán cero.",
-            ob_path,
+    def _encode_samples_text(self, samples: list[dict]) -> np.ndarray:
+        missing_keys: list[str] = []
+        missing_texts: list[str] = []
+        ordered_keys: list[str] = []
+
+        for sample in samples:
+            market = sample["market"]
+            key = str(sample["market_id"])
+            ordered_keys.append(key)
+            if key in self._text_cache:
+                continue
+            missing_keys.append(key)
+            missing_texts.append(market.get("question", ""))
+
+        if missing_keys:
+            batch_embeddings = self.text_encoder.encode_batch(
+                missing_texts,
+                show_progress_bar=True,
+            )
+            for key, embedding in zip(missing_keys, batch_embeddings):
+                self._text_cache[key] = np.asarray(embedding, dtype=np.float32)
+
+        return np.stack([self._text_cache[key] for key in ordered_keys]).astype(np.float32)
+
+    def _encode_market_text(self, market: dict, key: str) -> np.ndarray:
+        if key not in self._text_cache:
+            self._text_cache[key] = self.text_encoder.encode(market.get("question", "")).astype(np.float32)
+        return self._text_cache[key]
+
+
+def build_snapshot_datasets(
+    resolved_markets: list[dict],
+    price_histories: dict,
+    horizons_days: list[int],
+    lookback_days: int,
+    step_hours: int,
+    use_dummy_text: bool = False,
+) -> tuple[dict, dict, dict]:
+    """Build aligned tabular and sequence datasets from cached raw inputs."""
+    prepared_histories = prepare_history_map(price_histories)
+    samples: list[dict] = []
+    skipped = {
+        "missing_history": 0,
+        "no_valid_horizons": 0,
+        "no_sequence": 0,
+        "ambiguous": 0,
+    }
+
+    for market in resolved_markets:
+        market_id = str(market.get("id", ""))
+        history = prepared_histories.get(market_id)
+        if history is None or history.is_empty:
+            skipped["missing_history"] += 1
+            continue
+
+        market_samples = build_snapshot_samples(
+            market,
+            history,
+            horizons_days=horizons_days,
+            min_history_points=2,
         )
+        if not market_samples:
+            skipped["no_valid_horizons"] += 1
+            continue
 
-    return price_histories, order_books
+        for sample in market_samples:
+            sequence, length, snapshot_price = build_grid_sequence(
+                sample["history"],
+                snapshot_time=sample["snapshot_time"],
+                lookback_days=lookback_days,
+                step_hours=step_hours,
+            )
+            if sequence is None or length is None or snapshot_price is None:
+                skipped["no_sequence"] += 1
+                continue
+            sample["sequence"] = sequence
+            sample["sequence_length"] = int(length)
+            sample["snapshot_price_yes"] = float(snapshot_price)
+            samples.append(sample)
+
+    if not samples:
+        raise ValueError("No se pudieron construir muestras snapshot válidas.")
+
+    pipeline = FeaturePipeline(use_dummy_text=use_dummy_text)
+    tabular = pipeline.fit_transform_batch(samples)
+    sequence_lengths = np.asarray([sample["sequence_length"] for sample in samples], dtype=np.int64)
+    sequences = np.stack([sample["sequence"] for sample in samples]).astype(np.float32)
+    labels = np.asarray([sample["label_yes"] for sample in samples], dtype=np.float32)
+    targets = np.asarray([sample["target_residual"] for sample in samples], dtype=np.float32)
+    market_ids = np.asarray([sample["market_id"] for sample in samples], dtype=str)
+    snapshot_times = np.asarray([sample["snapshot_ts"] for sample in samples], dtype=np.int64)
+    end_dates = np.asarray([sample["end_ts"] for sample in samples], dtype=np.int64)
+    days_to_end = np.asarray([sample["days_to_end"] for sample in samples], dtype=np.int64)
+    snapshot_prices = np.asarray([sample["snapshot_price_yes"] for sample in samples], dtype=np.float32)
+
+    tabular_dataset = {
+        "numerical": tabular["numerical"],
+        "category_ids": tabular["category_ids"],
+        "text_embeddings": tabular["text_embeddings"],
+        "labels": labels,
+        "targets": targets,
+        "market_ids": market_ids,
+        "snapshot_times": snapshot_times,
+        "end_dates": end_dates,
+        "days_to_end": days_to_end,
+        "snapshot_prices": snapshot_prices,
+    }
+    ts_dataset = {
+        "sequences": sequences,
+        "sequence_lengths": sequence_lengths,
+        "static_numerical": tabular["numerical"],
+        "category_ids": tabular["category_ids"],
+        "text_embeddings": tabular["text_embeddings"],
+        "labels": labels,
+        "targets": targets,
+        "market_ids": market_ids,
+        "snapshot_times": snapshot_times,
+        "end_dates": end_dates,
+        "days_to_end": days_to_end,
+        "snapshot_prices": snapshot_prices,
+    }
+
+    metadata = {
+        "num_samples": int(labels.size),
+        "num_markets": int(len({sample["market_id"] for sample in samples})),
+        "snapshot_horizons_days": [int(x) for x in horizons_days],
+        "sequence_lookback_days": int(lookback_days),
+        "sequence_grid_hours": int(step_hours),
+        "tabular_feature_names": NUMERICAL_FEATURE_NAMES,
+        "sequence_feature_names": SEQUENCE_FEATURE_NAMES,
+        "skipped": skipped,
+        "market_positive_rate": float(labels.mean()),
+        "target_name": "residual_yes_minus_price",
+        "benchmark": "market_price_yes",
+    }
+
+    return tabular_dataset, ts_dataset, {"metadata": metadata, "pipeline": pipeline}
 
 
-def run_pipeline(input_dir: str = "data/raw", output_dir: str = "data/processed"):
-    """Script para ejecutar el pipeline completo de features."""
-    import argparse
+def save_snapshot_datasets(
+    tabular_dataset: dict,
+    ts_dataset: dict,
+    metadata: dict,
+    pipeline: FeaturePipeline,
+    tabular_dir: str | Path,
+    ts_dir: str | Path,
+) -> None:
+    """Persist aligned tabular and sequence datasets to disk."""
+    tab_dir = Path(tabular_dir)
+    seq_dir = Path(ts_dir)
+    tab_dir.mkdir(parents=True, exist_ok=True)
+    seq_dir.mkdir(parents=True, exist_ok=True)
 
+    np.save(tab_dir / "numerical_features.npy", tabular_dataset["numerical"])
+    np.save(tab_dir / "category_ids.npy", tabular_dataset["category_ids"])
+    np.save(tab_dir / "text_embeddings.npy", tabular_dataset["text_embeddings"])
+    np.save(tab_dir / "labels.npy", tabular_dataset["labels"])
+    np.save(tab_dir / "targets.npy", tabular_dataset["targets"])
+    np.save(tab_dir / "market_ids.npy", tabular_dataset["market_ids"])
+    np.save(tab_dir / "snapshot_times.npy", tabular_dataset["snapshot_times"])
+    np.save(tab_dir / "end_dates.npy", tabular_dataset["end_dates"])
+    np.save(tab_dir / "days_to_end.npy", tabular_dataset["days_to_end"])
+    np.save(tab_dir / "snapshot_prices.npy", tabular_dataset["snapshot_prices"])
+    pipeline.save(str(tab_dir / "pipeline"))
+
+    np.save(seq_dir / "sequences.npy", ts_dataset["sequences"])
+    np.save(seq_dir / "sequence_lengths.npy", ts_dataset["sequence_lengths"])
+    np.save(seq_dir / "static_numerical.npy", ts_dataset["static_numerical"])
+    np.save(seq_dir / "category_ids.npy", ts_dataset["category_ids"])
+    np.save(seq_dir / "text_embeddings.npy", ts_dataset["text_embeddings"])
+    np.save(seq_dir / "labels.npy", ts_dataset["labels"])
+    np.save(seq_dir / "targets.npy", ts_dataset["targets"])
+    np.save(seq_dir / "market_ids.npy", ts_dataset["market_ids"])
+    np.save(seq_dir / "snapshot_times.npy", ts_dataset["snapshot_times"])
+    np.save(seq_dir / "end_dates.npy", ts_dataset["end_dates"])
+    np.save(seq_dir / "days_to_end.npy", ts_dataset["days_to_end"])
+    np.save(seq_dir / "snapshot_prices.npy", ts_dataset["snapshot_prices"])
+
+    with open(tab_dir / "metadata.json", "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+    with open(seq_dir / "metadata.json", "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+
+
+def build_and_save_from_raw(
+    input_dir: str | Path,
+    tabular_output_dir: str | Path,
+    ts_output_dir: str | Path,
+    horizons_days: list[int],
+    lookback_days: int,
+    step_hours: int,
+    use_dummy_text: bool = False,
+) -> dict:
+    """Load cached raw JSONs, build aligned datasets, and save them."""
+    input_path = Path(input_dir)
+    with open(input_path / "resolved_markets.json", encoding="utf-8") as f:
+        resolved_markets = json.load(f)
+    with open(input_path / "price_histories.json", encoding="utf-8") as f:
+        price_histories = json.load(f)
+
+    tabular_dataset, ts_dataset, aux = build_snapshot_datasets(
+        resolved_markets=resolved_markets,
+        price_histories=price_histories,
+        horizons_days=horizons_days,
+        lookback_days=lookback_days,
+        step_hours=step_hours,
+        use_dummy_text=use_dummy_text,
+    )
+    save_snapshot_datasets(
+        tabular_dataset,
+        ts_dataset,
+        metadata=aux["metadata"],
+        pipeline=aux["pipeline"],
+        tabular_dir=tabular_output_dir,
+        ts_dir=ts_output_dir,
+    )
+    return aux["metadata"]
+
+
+def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    parser = argparse.ArgumentParser(description="Feature Engineering Pipeline")
-    parser.add_argument("--input", default=input_dir)
-    parser.add_argument("--output", default=output_dir)
-    parser.add_argument("--dummy-text", action="store_true", help="Usar embeddings dummy")
-    parser.add_argument(
-        "--snapshot-offset", type=int, default=7,
-        help="Días antes de resolución para tomar snapshot de precio (default: 7)",
-    )
-    parser.add_argument(
-        "--no-adaptive-cutoff", action="store_true",
-        help="Desactivar fallback adaptivo para mercados de vida corta",
-    )
-    parser.add_argument("--config", default=None, help="Ruta a config.yaml")
+    parser = argparse.ArgumentParser(description="Build snapshot-based tabular + TS datasets")
+    parser.add_argument("--config", default="config/config.yaml")
+    parser.add_argument("--input-dir", default=None)
+    parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--ts-output-dir", default=None)
+    parser.add_argument("--dummy-text", action="store_true")
     args = parser.parse_args()
 
-    use_adaptive_cutoff = True  # default
-    # Cargar config si se proporciona
-    if args.config:
-        from ..config import load_config
-        cfg = load_config(args.config)
-        args.input = cfg.get("data", {}).get("raw_dir", args.input)
-        args.output = cfg.get("data", {}).get("processed_dir", args.output)
-        args.dummy_text = cfg.get("features", {}).get("use_dummy_text", args.dummy_text)
-        if args.snapshot_offset == 7:  # solo sobreescribir si no fue pasado explícitamente
-            args.snapshot_offset = cfg.get("features", {}).get("snapshot_offset_days", 7)
-        use_adaptive_cutoff = cfg.get("features", {}).get("adaptive_cutoff", True)
-    # CLI flag toma precedencia sobre config
-    if args.no_adaptive_cutoff:
-        use_adaptive_cutoff = False
+    cfg = load_config(args.config)
+    data_cfg = cfg.get("data", {})
+    feature_cfg = cfg.get("features", {})
+    ts_cfg = cfg.get("ts_data", {})
 
-    from ..data.preprocessing import build_snapshot_market, compute_label
+    input_dir = args.input_dir or data_cfg.get("raw_dir", "data/raw")
+    output_dir = args.output_dir or data_cfg.get("processed_dir", "data/processed")
+    ts_output_dir = args.ts_output_dir or ts_cfg.get("processed_dir", "data/processed_ts")
+    horizons_days = feature_cfg.get("snapshot_horizons_days", [1, 3, 7, 14, 30])
+    lookback_days = ts_cfg.get("sequence_lookback_days", 30)
+    step_hours = ts_cfg.get("sequence_grid_hours", 12)
+    use_dummy_text = bool(args.dummy_text or feature_cfg.get("use_dummy_text", False))
 
-    input_path = Path(args.input)
-    output_path = Path(args.output)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    # Cargar mercados resueltos
-    resolved_path = input_path / "resolved_markets.json"
-    if not resolved_path.exists():
-        logger.error("No se encontró %s", resolved_path)
-        return
-
-    with open(resolved_path) as f:
-        resolved_markets = json.load(f)
-
-    # Cargar datos auxiliares (price_histories, order_books)
-    price_histories, order_books = _load_auxiliary_data(input_path)
-
-    # Filtrar mercados con resolución válida usando snapshot prices
-    valid_markets = []
-    labels = []
-    skipped = {"no_snapshot": 0, "ambiguous": 0, "no_prices": 0}
-
-    for m in resolved_markets:
-        snapshot_market, snapshot_price = build_snapshot_market(
-            m,
-            price_histories=price_histories,
-            snapshot_offset_days=args.snapshot_offset,
-            use_adaptive_cutoff=use_adaptive_cutoff,
-        )
-
-        if snapshot_market is None or snapshot_price is None:
-            skipped["no_snapshot"] += 1
-            continue
-
-        label = compute_label(m, snapshot_price)
-        if label == -1:
-            skipped["ambiguous"] += 1
-            continue
-
-        valid_markets.append(snapshot_market)
-        labels.append(label)
-
-    logger.info("Mercados válidos para entrenamiento: %d", len(valid_markets))
-    logger.info("  Positivos (buy): %d", sum(labels))
-    logger.info("  Negativos (no buy): %d", len(labels) - sum(labels))
-    logger.info("  Descartados: %s", skipped)
-
-    if not valid_markets:
-        logger.error("No hay mercados válidos para entrenar. Verifica los datos.")
-        return
-
-    # Feature extraction (con datos auxiliares)
-    pipeline = FeaturePipeline(use_dummy_text=args.dummy_text)
-    features = pipeline.fit_transform_batch(
-        valid_markets,
-        price_histories=price_histories,
-        order_books=order_books,
+    logger.info(
+        "Building snapshot datasets from %s -> %s / %s | horizons=%s lookback=%sd step=%sh",
+        input_dir,
+        output_dir,
+        ts_output_dir,
+        horizons_days,
+        lookback_days,
+        step_hours,
     )
 
-    # Guardar timestamps de endDate para temporal split
-    end_dates = []
-    for m in valid_markets:
-        ed = m.get("endDate", "")
-        try:
-            end_dates.append(pd.to_datetime(ed, utc=True).timestamp())
-        except (ValueError, TypeError):
-            end_dates.append(0.0)
-
-    # Guardar
-    np.save(output_path / "numerical_features.npy", features["numerical"])
-    np.save(output_path / "category_ids.npy", features["category_ids"])
-    np.save(output_path / "text_embeddings.npy", features["text_embeddings"])
-    np.save(output_path / "labels.npy", np.array(labels, dtype=np.float32))
-    np.save(output_path / "end_dates.npy", np.array(end_dates, dtype=np.float64))
-    pipeline.save(str(output_path / "pipeline"))
-
-    logger.info("Features guardadas en %s/", output_path)
-    logger.info("  numerical_features: %s", features["numerical"].shape)
-    logger.info("  category_ids: %s", features["category_ids"].shape)
-    logger.info("  text_embeddings: %s", features["text_embeddings"].shape)
-    logger.info("  labels: %d", len(labels))
-    logger.info("  end_dates: %d (para temporal split)", len(end_dates))
+    metadata = build_and_save_from_raw(
+        input_dir=input_dir,
+        tabular_output_dir=output_dir,
+        ts_output_dir=ts_output_dir,
+        horizons_days=horizons_days,
+        lookback_days=lookback_days,
+        step_hours=step_hours,
+        use_dummy_text=use_dummy_text,
+    )
+    logger.info(
+        "Snapshot datasets saved | samples=%d markets=%d positive_rate=%.3f skipped=%s",
+        metadata["num_samples"],
+        metadata["num_markets"],
+        metadata["market_positive_rate"],
+        metadata["skipped"],
+    )
 
 
 if __name__ == "__main__":
-    run_pipeline()
+    main()

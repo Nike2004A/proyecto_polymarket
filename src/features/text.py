@@ -32,13 +32,18 @@ class TextEncoder:
         embedding = self.model.encode(text, convert_to_numpy=True)
         return embedding.astype(np.float32)
 
-    def encode_batch(self, texts: list[str], batch_size: int = 64) -> np.ndarray:
+    def encode_batch(
+        self,
+        texts: list[str],
+        batch_size: int = 64,
+        show_progress_bar: bool = False,
+    ) -> np.ndarray:
         """Genera embeddings para un batch de textos."""
         embeddings = self.model.encode(
             texts,
             convert_to_numpy=True,
             batch_size=batch_size,
-            show_progress_bar=True,
+            show_progress_bar=show_progress_bar,
         )
         return embeddings.astype(np.float32)
 
@@ -62,7 +67,12 @@ class DummyTextEncoder:
         rng = np.random.default_rng(abs(hash(text)) % (2**31))
         return rng.standard_normal(self._embed_dim).astype(np.float32)
 
-    def encode_batch(self, texts: list[str], batch_size: int = 64) -> np.ndarray:
+    def encode_batch(
+        self,
+        texts: list[str],
+        batch_size: int = 64,
+        show_progress_bar: bool = False,
+    ) -> np.ndarray:
         return np.stack([self.encode(t) for t in texts])
 
     def encode_markets(self, markets: list[dict]) -> np.ndarray:

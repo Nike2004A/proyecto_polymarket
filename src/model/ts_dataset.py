@@ -1,39 +1,50 @@
-"""Dataset y dataloaders para el modelo de series de tiempo."""
+"""Dataset and dataloaders for the fixed-grid sequence model."""
 
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset, Subset, WeightedRandomSampler
+from torch.utils.data import DataLoader, Dataset, Subset
 
 from .splits import build_dataset_split
 
-logger = logging.getLogger(__name__)
-
 
 class TimeSeriesMarketDataset(Dataset):
-    """Dataset TS construido a partir de secuencias de precio pre-snapshot."""
+    """Sequence dataset with a static branch aligned to the tabular snapshots."""
 
     def __init__(
         self,
         sequences: np.ndarray,
         sequence_lengths: np.ndarray,
+        static_numerical: np.ndarray,
+        category_ids: np.ndarray,
+        text_embeddings: np.ndarray,
         labels: np.ndarray,
+        targets: np.ndarray | None = None,
         timestamps: np.ndarray | None = None,
+        groups: np.ndarray | None = None,
         market_ids: np.ndarray | None = None,
         snapshot_prices: np.ndarray | None = None,
+        snapshot_times: np.ndarray | None = None,
+        days_to_end: np.ndarray | None = None,
         metadata: dict | None = None,
     ):
         self.sequences = torch.FloatTensor(sequences)
         self.sequence_lengths = torch.LongTensor(sequence_lengths)
+        self.static_numerical = torch.FloatTensor(static_numerical)
+        self.categories = torch.LongTensor(category_ids)
+        self.text_emb = torch.FloatTensor(text_embeddings)
         self.labels = torch.FloatTensor(labels)
+        self.targets = torch.FloatTensor(targets if targets is not None else labels)
         self.timestamps = timestamps
+        self.groups = groups
         self.market_ids = market_ids
         self.snapshot_prices = snapshot_prices
+        self.snapshot_times = snapshot_times
+        self.days_to_end = days_to_end
         self.metadata = metadata or {}
 
     def __len__(self) -> int:
@@ -43,12 +54,20 @@ class TimeSeriesMarketDataset(Dataset):
         item = {
             "sequence": self.sequences[idx],
             "sequence_length": self.sequence_lengths[idx],
+            "static_numerical": self.static_numerical[idx],
+            "category": self.categories[idx],
+            "text_emb": self.text_emb[idx],
             "label": self.labels[idx],
+            "target": self.targets[idx],
         }
         if self.market_ids is not None:
-            item["market_id"] = self.market_ids[idx]
+            item["market_id"] = str(self.market_ids[idx])
         if self.snapshot_prices is not None:
             item["snapshot_price"] = float(self.snapshot_prices[idx])
+        if self.snapshot_times is not None:
+            item["snapshot_time"] = int(self.snapshot_times[idx])
+        if self.days_to_end is not None:
+            item["days_to_end"] = float(self.days_to_end[idx])
         return item
 
     @classmethod
@@ -60,158 +79,57 @@ class TimeSeriesMarketDataset(Dataset):
             with open(metadata_path, encoding="utf-8") as f:
                 metadata = json.load(f)
 
-        timestamps = None
-        end_dates_path = path / "end_dates.npy"
-        if end_dates_path.exists():
-            timestamps = np.load(end_dates_path)
-
-        market_ids = None
-        market_ids_path = path / "market_ids.npy"
-        if market_ids_path.exists():
-            market_ids = np.load(market_ids_path, allow_pickle=True)
-
-        snapshot_prices = None
-        snapshot_prices_path = path / "snapshot_prices.npy"
-        if snapshot_prices_path.exists():
-            snapshot_prices = np.load(snapshot_prices_path)
-
         return cls(
             sequences=np.load(path / "sequences.npy"),
             sequence_lengths=np.load(path / "sequence_lengths.npy"),
+            static_numerical=np.load(path / "static_numerical.npy"),
+            category_ids=np.load(path / "category_ids.npy"),
+            text_embeddings=np.load(path / "text_embeddings.npy"),
             labels=np.load(path / "labels.npy"),
-            timestamps=timestamps,
-            market_ids=market_ids,
-            snapshot_prices=snapshot_prices,
+            targets=_maybe_load(path / "targets.npy"),
+            timestamps=_maybe_load(path / "end_dates.npy"),
+            groups=_maybe_load(path / "market_ids.npy", allow_pickle=True),
+            market_ids=_maybe_load(path / "market_ids.npy", allow_pickle=True),
+            snapshot_prices=_maybe_load(path / "snapshot_prices.npy"),
+            snapshot_times=_maybe_load(path / "snapshot_times.npy"),
+            days_to_end=_maybe_load(path / "days_to_end.npy"),
             metadata=metadata,
         )
 
 
-def collate_ts_batch(batch: list[dict]) -> dict[str, torch.Tensor | list]:
-    """
-    Convierte secuencias left-padded almacenadas en right-padded para GRU packed.
-    """
-    sequences = torch.stack([item["sequence"] for item in batch])
-    lengths = torch.stack([item["sequence_length"] for item in batch]).long()
-    labels = torch.stack([item["label"] for item in batch]).float()
-
-    right_padded = torch.zeros_like(sequences)
-    for i, length in enumerate(lengths.tolist()):
-        if length <= 0:
-            continue
-        right_padded[i, :length] = sequences[i, -length:]
-
-    collated: dict[str, torch.Tensor | list] = {
-        "sequence": right_padded,
-        "sequence_length": lengths,
-        "label": labels,
-    }
-
-    if "market_id" in batch[0]:
-        collated["market_id"] = [item["market_id"] for item in batch]
-    if "snapshot_price" in batch[0]:
-        collated["snapshot_price"] = torch.tensor(
-            [item["snapshot_price"] for item in batch],
-            dtype=torch.float32,
-        )
-    return collated
-
-
-def create_ts_dataloaders(
-    dataset: TimeSeriesMarketDataset,
-    batch_size: int = 64,
-    val_split: float = 0.2,
-    use_weighted_sampler: bool = True,
-    num_workers: int = 0,
-    temporal_split: bool = True,
-    seed: int = 42,
-) -> tuple[DataLoader, DataLoader]:
-    """Crea dataloaders train/val para el dataset TS."""
-    split_strategy = "temporal" if temporal_split else "random"
-    train_loader, val_loader, _, _ = create_ts_train_val_test_dataloaders(
-        dataset,
-        batch_size=batch_size,
-        val_split=val_split,
-        test_split=0.0,
-        use_weighted_sampler=use_weighted_sampler,
-        num_workers=num_workers,
-        split_strategy=split_strategy,
-        seed=seed,
-    )
-    return train_loader, val_loader
-
-
 def create_ts_train_val_test_dataloaders(
     dataset: TimeSeriesMarketDataset,
-    batch_size: int = 64,
+    batch_size: int = 128,
     val_split: float = 0.15,
     test_split: float = 0.15,
-    use_weighted_sampler: bool = True,
     num_workers: int = 0,
-    split_strategy: str = "random",
+    split_strategy: str = "temporal_grouped",
     seed: int = 42,
+    use_weighted_sampler: bool | None = None,
 ) -> tuple[DataLoader, DataLoader, DataLoader | None, dict]:
-    """Crea dataloaders train/val/test para el dataset TS."""
     split = build_dataset_split(
         n_samples=len(dataset),
         labels=dataset.labels.numpy(),
         timestamps=dataset.timestamps,
+        groups=dataset.groups,
         val_split=val_split,
         test_split=test_split,
         strategy=split_strategy,
         seed=seed,
     )
 
-    if split.strategy == "temporal":
-        logger.info(
-            "Temporal split TS: train=%d, val=%d, test=%d",
-            len(split.train_indices),
-            len(split.val_indices),
-            len(split.test_indices),
-        )
-    else:
-        logger.info(
-            "Random split TS: train=%d, val=%d, test=%d (seed=%d)",
-            len(split.train_indices),
-            len(split.val_indices),
-            len(split.test_indices),
-            seed,
-        )
-
-    train_ds = Subset(dataset, split.train_indices)
-    val_ds = Subset(dataset, split.val_indices)
-
-    train_sampler = None
-    if use_weighted_sampler:
-        train_labels = dataset.labels[split.train_indices].to(torch.long)
-        class_counts = torch.bincount(train_labels)
-        if len(class_counts) >= 2 and class_counts.min() > 0:
-            class_weights = 1.0 / class_counts.float()
-            sample_weights = class_weights[train_labels]
-            generator = torch.Generator().manual_seed(seed)
-            train_sampler = WeightedRandomSampler(
-                weights=sample_weights,
-                num_samples=len(train_ds),
-                replacement=True,
-                generator=generator,
-            )
-
     train_loader = DataLoader(
-        train_ds,
+        Subset(dataset, split.train_indices),
         batch_size=batch_size,
-        shuffle=train_sampler is None,
-        sampler=train_sampler,
+        shuffle=True,
         num_workers=num_workers,
-        drop_last=True,
-        collate_fn=collate_ts_batch,
     )
     val_loader = DataLoader(
-        val_ds,
+        Subset(dataset, split.val_indices),
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        collate_fn=collate_ts_batch,
     )
-
     test_loader = None
     if split.test_indices:
         test_loader = DataLoader(
@@ -219,7 +137,6 @@ def create_ts_train_val_test_dataloaders(
             batch_size=batch_size,
             shuffle=False,
             num_workers=num_workers,
-            collate_fn=collate_ts_batch,
         )
 
     metadata = split.to_metadata()
@@ -233,3 +150,9 @@ def create_ts_train_val_test_dataloaders(
         ),
     }
     return train_loader, val_loader, test_loader, metadata
+
+
+def _maybe_load(path: Path, allow_pickle: bool = False):
+    if not path.exists():
+        return None
+    return np.load(path, allow_pickle=allow_pickle)

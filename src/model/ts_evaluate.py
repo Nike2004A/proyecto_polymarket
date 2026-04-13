@@ -1,62 +1,120 @@
-"""Evaluación para el modelo GRU de series de tiempo."""
+"""Evaluation helpers for the sequence snapshot model."""
 
 from __future__ import annotations
-
-import logging
 
 import numpy as np
 import torch
 
-from .ts_architecture import PriceSequenceGRU
-from .metrics import compute_binary_classification_metrics
+from .metrics import (
+    clip_probabilities_from_residual,
+    compute_binary_classification_metrics,
+    compute_bucketed_metrics,
+    compute_ev_metrics,
+    compute_probability_metrics,
+    compute_residual_metrics,
+    sigmoid,
+)
 
-logger = logging.getLogger(__name__)
 
-
-def evaluate_ts_model(
-    model: PriceSequenceGRU,
-    data_loader,
-    threshold: float = 0.5,
-    device: str | None = None,
-) -> dict:
-    """Evalúa el modelo TS y retorna métricas + scores crudos."""
+def collect_ts_outputs(model, dataloader, device: str | None = None) -> dict:
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     model = model.to(device)
     model.eval()
 
-    all_scores = []
-    all_labels = []
+    logits = []
+    labels = []
+    prices = []
+    days_to_end = []
+    market_ids = []
+    snapshot_times = []
+
     with torch.no_grad():
-        for batch in data_loader:
-            sequences = batch["sequence"].to(device)
-            lengths = batch["sequence_length"].to(device)
-            labels = batch["label"].to(device)
-            scores = model(sequences, lengths)
-            all_scores.extend(scores.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+        for batch in dataloader:
+            batch_logits = model(
+                batch["sequence"].to(device),
+                batch["sequence_length"].to(device),
+                batch["static_numerical"].to(device),
+                batch["category"].to(device),
+                batch["text_emb"].to(device),
+            )
+            logits.extend(batch_logits.cpu().numpy())
+            labels.extend(batch["label"].cpu().numpy())
+            if "snapshot_price" in batch:
+                prices.extend(batch["snapshot_price"].cpu().numpy())
+            if "days_to_end" in batch:
+                days_to_end.extend(batch["days_to_end"].cpu().numpy())
+            if "market_id" in batch:
+                market_ids.extend(batch["market_id"])
+            if "snapshot_time" in batch:
+                snapshot_times.extend(batch["snapshot_time"].cpu().numpy())
 
-    logits_arr = np.asarray(all_scores, dtype=np.float32)
-    labels_arr = np.asarray(all_labels, dtype=np.float32)
-    probs_arr = 1.0 / (1.0 + np.exp(-logits_arr))
-    results = compute_binary_classification_metrics(
-        labels_arr.astype(int),
-        probs_arr,
-        threshold=threshold,
-        digits=3,
-    )
-    results["logits"] = logits_arr
-    results["auc_roc"] = results.pop("roc_auc")
+    return {
+        "logits": np.asarray(logits, dtype=np.float32),
+        "labels": np.asarray(labels, dtype=np.float32),
+        "market_prices": np.asarray(prices, dtype=np.float32),
+        "days_to_end": np.asarray(days_to_end, dtype=np.float32),
+        "market_ids": np.asarray(market_ids, dtype=object),
+        "snapshot_times": np.asarray(snapshot_times, dtype=np.int64),
+    }
+
+
+def evaluate_ts_model(
+    model,
+    data_loader,
+    calibrator=None,
+    top_k: int = 20,
+    prediction_mode: str = "classification",
+    roi_cap: float | None = None,
+    device: str | None = None,
+    threshold: float | None = None,
+) -> dict:
+    outputs = collect_ts_outputs(model, data_loader, device=device)
+    if prediction_mode == "residual":
+        raw_probs = clip_probabilities_from_residual(outputs["logits"], outputs["market_prices"])
+        calibrated_probs = calibrator.predict_proba(raw_probs) if calibrator is not None else raw_probs
+        residual_metrics = compute_residual_metrics(
+            outputs["labels"],
+            outputs["market_prices"],
+            outputs["logits"],
+        )
+    else:
+        raw_probs = sigmoid(outputs["logits"])
+        calibrated_probs = calibrator.predict_proba(outputs["logits"]) if calibrator is not None else raw_probs
+        residual_metrics = {}
+    results = {
+        "labels": outputs["labels"],
+        "logits": outputs["logits"],
+        "raw_probs": raw_probs,
+        "calibrated_probs": calibrated_probs,
+        "market_prices": outputs["market_prices"],
+        "days_to_end": outputs["days_to_end"],
+        "market_ids": outputs["market_ids"],
+        "snapshot_times": outputs["snapshot_times"],
+        "prediction_mode": prediction_mode,
+        "raw_metrics": compute_probability_metrics(outputs["labels"], raw_probs),
+        "calibrated_metrics": compute_probability_metrics(outputs["labels"], calibrated_probs),
+        "market_baseline_metrics": compute_probability_metrics(outputs["labels"], outputs["market_prices"]),
+        "residual_metrics": residual_metrics,
+        "ev_metrics": compute_ev_metrics(
+            outputs["labels"],
+            outputs["market_prices"],
+            calibrated_probs,
+            top_k=top_k,
+            roi_cap=roi_cap,
+        ),
+        "by_horizon": compute_bucketed_metrics(
+            outputs["labels"],
+            outputs["market_prices"],
+            calibrated_probs,
+            outputs["days_to_end"],
+            top_k=top_k,
+            roi_cap=roi_cap,
+        ),
+    }
+    if threshold is not None:
+        binary_metrics = compute_binary_classification_metrics(outputs["labels"], calibrated_probs, threshold=threshold)
+        results.update(binary_metrics)
+        results["scores"] = calibrated_probs
     return results
-
-
-def print_ts_evaluation(results: dict) -> None:
-    logger.info("Threshold: %.4f", results["threshold"])
-    logger.info("Accuracy: %.4f", results["accuracy"])
-    logger.info("Precision: %.4f", results["precision"])
-    logger.info("Recall: %.4f", results["recall"])
-    logger.info("F1: %.4f", results["f1"])
-    logger.info("AUC-ROC: %.4f", results["auc_roc"])
-    logger.info("PR-AUC: %.4f", results["pr_auc"])
-    print(results["classification_report"])

@@ -1,294 +1,304 @@
-"""Extracción de features numéricas de mercados de Polymarket."""
+"""Observable numerical features built from snapshot-compatible histories."""
+
+from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-# Orden de las features numéricas (23 features)
+from ..data.snapshots import PreparedHistory, get_points_until, latest_price_before, prepare_price_history
+
+
 NUMERICAL_FEATURE_NAMES = [
-    # --- Precio y spread (snapshot) ---
-    "price_yes",
-    "price_no",
-    "spread",
-    # --- Volumen y liquidez ---
-    "volume_24h",
-    "volume_total",
-    "liquidity",
-    "volume_liquidity_ratio",
-    # --- Temporales de mercado ---
-    "days_to_resolution",
-    "market_age_days",
-    # --- Series de tiempo: momentum multi-ventana ---
-    "price_momentum_7d",
-    "price_volatility_7d",
-    "price_momentum_14d",
-    "price_momentum_30d",
-    "price_volatility_30d",
-    # --- Series de tiempo: tendencia y cobertura ---
-    "price_trend_slope",      # pendiente de regresión lineal (proxy de tendencia ARIMA)
-    "ewm_momentum",           # momentum exponencialmente ponderado (más peso a datos recientes)
-    "ts_coverage",            # log(n_puntos + 1) — qué tan bien cubierta está la serie
-    "ts_days_span",           # días entre primer y último registro en history
-    # --- Order book ---
-    "bid_depth",
-    "ask_depth",
-    "book_imbalance",
-    # --- Indicador de trayectoria ---
-    "price_at_halflife",      # precio al 50% del tiempo de vida del mercado
-    # --- Mercado estructural ---
-    "neg_risk",               # 1 si es negRisk market (complementario en un grupo de eventos)
-                              # negRisk=True resuelve Yes solo 11% vs 43% sin negRisk
+    "snapshot_price_yes",
+    "days_to_end",
+    "market_age_days_at_snapshot",
+    "days_since_last_trade",
+    "history_points_1d",
+    "history_points_3d",
+    "history_points_7d",
+    "history_points_30d",
+    "history_span_days",
+    "return_1d",
+    "return_3d",
+    "return_7d",
+    "return_14d",
+    "return_30d",
+    "realized_vol_1d",
+    "realized_vol_3d",
+    "realized_vol_7d",
+    "realized_vol_14d",
+    "realized_vol_30d",
+    "trend_slope_7d",
+    "trend_slope_30d",
+    "price_percentile_30d",
+    "distance_to_30d_min",
+    "distance_to_30d_max",
+    "neg_risk",
 ]
 
-NUM_NUMERICAL_FEATURES = len(NUMERICAL_FEATURE_NAMES)  # 23
+NUM_NUMERICAL_FEATURES = len(NUMERICAL_FEATURE_NAMES)
+WINDOW_DAYS = (1, 3, 7, 14, 30)
 
 
 def extract_numerical_features(
     market: dict,
-    price_history: list[dict] | None = None,
-    order_book: dict | None = None,
+    price_history: PreparedHistory | list[dict] | None = None,
+    snapshot_time: pd.Timestamp | None = None,
+    snapshot_price_yes: float | None = None,
+    days_to_end: float | None = None,
 ) -> np.ndarray:
-    """
-    Extrae el vector de features numéricas de un mercado.
+    """Extract snapshot-compatible numerical features for a single market."""
+    history = _coerce_history(price_history)
+    if snapshot_time is None:
+        snapshot_time = pd.Timestamp.now(tz="UTC")
 
-    Args:
-        market: Diccionario con datos del mercado (ya parseado).
-        price_history: Lista de registros [{t: unix_ts, p: price}, ...].
-        order_book: Diccionario del order book {bids: [...], asks: [...]}.
+    history_until_snapshot = get_points_until(history, snapshot_time)
+    if snapshot_price_yes is None:
+        snapshot_price_yes = latest_price_before(history, snapshot_time)
+        if snapshot_price_yes is None:
+            snapshot_price_yes = _market_price_fallback(market)
 
-    Returns:
-        np.ndarray de forma (23,) con las features numéricas.
-    """
-    # Precios snapshot
-    outcome_prices = market.get("outcomePrices", [])
-    price_yes = float(outcome_prices[0]) if len(outcome_prices) > 0 else 0.5
-    price_no = float(outcome_prices[1]) if len(outcome_prices) > 1 else 1 - price_yes
+    snapshot_ts = int(snapshot_time.timestamp())
 
-    # Spread
-    best_bid = _safe_float(market.get("bestBid", 0))
-    best_ask = _safe_float(market.get("bestAsk", 0))
-    spread = _safe_float(market.get("spread", best_ask - best_bid))
+    end_date = _parse_time(market.get("endDate"))
+    if days_to_end is None:
+        if end_date is not None:
+            days_to_end = max(0.0, (end_date - snapshot_time).total_seconds() / 86400.0)
+        else:
+            days_to_end = 0.0
 
-    # Volumen y liquidez
-    volume_24h = _safe_float(market.get("volume24hr", 0))
-    volume_total = _safe_float(market.get("volume", 0))
-    liquidity = _safe_float(market.get("liquidity", 0))
-    vol_liq_ratio = volume_24h / liquidity if liquidity > 0 else 0.0
-
-    # Features temporales de mercado
-    days_to_resolution = _safe_float(market.get("days_to_resolution", 30))
-    market_age_days = _safe_float(market.get("market_age_days", 0))
-
-    # Features de series de tiempo
-    ts_features = _compute_ts_features(price_history)
-
-    # Order book
-    bid_depth, ask_depth, book_imbalance = _compute_book_features(order_book)
-
-    # Precio al 50% de vida del mercado (de la serie de tiempo)
-    price_halflife = _compute_price_at_halflife(price_history, market_age_days, days_to_resolution)
-
-    # negRisk: mercados complementarios dentro de un grupo de eventos.
-    # Resuelven Yes solo ~11% del tiempo vs ~43% en mercados normales.
-    neg_risk = float(bool(market.get("negRisk", False)))
-
-    # El orden debe coincidir exactamente con NUMERICAL_FEATURE_NAMES
-    features = np.array([
-        price_yes,
-        price_no,
-        spread,
-        volume_24h,
-        volume_total,
-        liquidity,
-        vol_liq_ratio,
-        days_to_resolution,
-        market_age_days,
-        ts_features["momentum_7d"],
-        ts_features["volatility_7d"],
-        ts_features["momentum_14d"],
-        ts_features["momentum_30d"],
-        ts_features["volatility_30d"],
-        ts_features["trend_slope"],
-        ts_features["ewm_momentum"],
-        ts_features["coverage"],
-        ts_features["days_span"],
-        bid_depth,
-        ask_depth,
-        book_imbalance,
-        price_halflife,
-        neg_risk,
-    ], dtype=np.float32)
-
-    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-    return features
-
-
-def extract_numerical_features_batch(
-    markets_df: pd.DataFrame,
-    price_histories: dict | None = None,
-    order_books: dict | None = None,
-) -> np.ndarray:
-    """
-    Extrae features numéricas para un DataFrame de mercados.
-
-    Args:
-        markets_df: DataFrame con mercados preprocesados.
-        price_histories: Dict {market_id: [{t, p}, ...]}.
-        order_books: Dict {market_id: order_book}.
-
-    Returns:
-        np.ndarray de forma (N, 23).
-    """
-    price_histories = price_histories or {}
-    order_books = order_books or {}
-
-    features_list = []
-    for _, row in markets_df.iterrows():
-        market_dict = row.to_dict()
-        mid = market_dict.get("id", "")
-        history = price_histories.get(mid)
-        book = order_books.get(mid)
-        features_list.append(extract_numerical_features(market_dict, history, book))
-
-    return np.stack(features_list)
-
-
-# ── Helpers privados ──────────────────────────────────────────────────────────
-
-def _safe_float(val, default: float = 0.0) -> float:
-    try:
-        return float(val) if val is not None else default
-    except (ValueError, TypeError):
-        return default
-
-
-def _compute_ts_features(price_history: list[dict] | None) -> dict:
-    """
-    Calcula todas las features de series de tiempo a partir del historial de precios.
-
-    Retorna un dict con claves:
-        momentum_7d, volatility_7d, momentum_14d, momentum_30d, volatility_30d,
-        trend_slope, ewm_momentum, coverage, days_span
-    """
-    zeros = {
-        "momentum_7d": 0.0, "volatility_7d": 0.0,
-        "momentum_14d": 0.0, "momentum_30d": 0.0, "volatility_30d": 0.0,
-        "trend_slope": 0.0, "ewm_momentum": 0.0,
-        "coverage": 0.0, "days_span": 0.0,
-    }
-
-    if not price_history or len(price_history) < 2:
-        return zeros
-
-    # Extraer precios y timestamps, filtrando valores inválidos
-    records = sorted(price_history, key=lambda x: x.get("t", 0))
-    prices = [_safe_float(r.get("p", r.get("price", 0))) for r in records]
-    timestamps = [_safe_float(r.get("t", 0)) for r in records]
-
-    prices = [p for p in prices if 0 < p <= 1]
-    if len(prices) < 2:
-        return zeros
-
-    # Cobertura y span temporal
-    n = len(prices)
-    coverage = float(np.log1p(n))
-    days_span = (timestamps[-1] - timestamps[0]) / 86400.0 if len(timestamps) >= 2 else 0.0
-
-    # Ventanas de momentum y volatilidad.
-    # NOTA: window_size son los últimos N *registros* de la serie, no días calendario.
-    # La densidad de la serie varía por mercado, así que "7 registros" puede ser
-    # 1 semana o 1 mes según la actividad del mercado.
-    def _window_stats(window_size: int) -> tuple[float, float]:
-        """Retorna (momentum, volatilidad) de los últimos window_size registros."""
-        recent = prices[-window_size:] if len(prices) >= window_size else prices
-        if len(recent) < 2:
-            return 0.0, 0.0
-        mom = (recent[-1] - recent[0]) / recent[0] if recent[0] > 0 else 0.0
-        vol = float(np.std(recent))
-        return mom, vol
-
-    mom_7d, vol_7d = _window_stats(7)
-    mom_14d, _ = _window_stats(14)
-    mom_30d, vol_30d = _window_stats(30)
-
-    # Pendiente de tendencia lineal (sobre todos los puntos normalizados 0→1)
-    x = np.linspace(0, 1, n)
-    trend_slope = float(np.polyfit(x, prices, 1)[0]) if n >= 3 else 0.0
-
-    # EWM momentum: diferencia entre EWM rápida (span=7) y lenta (span=30)
-    prices_arr = np.array(prices)
-    if len(prices_arr) >= 7:
-        alpha_fast = 2 / (7 + 1)
-        alpha_slow = 2 / (30 + 1)
-        ewm_fast = _ewm_last(prices_arr, alpha_fast)
-        ewm_slow = _ewm_last(prices_arr, alpha_slow)
-        ewm_momentum = (ewm_fast - ewm_slow) / ewm_slow if ewm_slow > 0 else 0.0
+    created_at = _parse_time(market.get("createdAt"))
+    if created_at is not None:
+        market_age_days = max(0.0, (snapshot_time - created_at).total_seconds() / 86400.0)
     else:
-        ewm_momentum = mom_7d
+        market_age_days = 0.0
 
-    return {
-        "momentum_7d": mom_7d,
-        "volatility_7d": vol_7d,
-        "momentum_14d": mom_14d,
-        "momentum_30d": mom_30d,
-        "volatility_30d": vol_30d,
-        "trend_slope": trend_slope,
-        "ewm_momentum": float(ewm_momentum),
-        "coverage": coverage,
-        "days_span": days_span,
-    }
+    if history_until_snapshot.is_empty:
+        days_since_last_trade = market_age_days
+        history_span_days = 0.0
+    else:
+        days_since_last_trade = max(
+            0.0,
+            (snapshot_ts - int(history_until_snapshot.timestamps[-1])) / 86400.0,
+        )
+        history_span_days = max(
+            0.0,
+            (snapshot_ts - int(history_until_snapshot.timestamps[0])) / 86400.0,
+        )
+
+    counts: dict[int, int] = {}
+    returns: dict[int, float] = {}
+    vols: dict[int, float] = {}
+    slopes: dict[int, float] = {}
+
+    for days in WINDOW_DAYS:
+        counts[days] = _count_points_in_window(history_until_snapshot, snapshot_ts, days)
+        returns[days], vols[days], slopes[days] = _window_summary(
+            history_until_snapshot,
+            snapshot_ts,
+            days,
+            snapshot_price=float(snapshot_price_yes),
+        )
+
+    percentile_30d, dist_min_30d, dist_max_30d = _window_price_position(
+        history_until_snapshot,
+        snapshot_ts,
+        30,
+        snapshot_price=float(snapshot_price_yes),
+    )
+    features = np.array([
+        float(snapshot_price_yes),
+        float(days_to_end),
+        float(market_age_days),
+        float(days_since_last_trade),
+        float(counts[1]),
+        float(counts[3]),
+        float(counts[7]),
+        float(counts[30]),
+        float(history_span_days),
+        float(returns[1]),
+        float(returns[3]),
+        float(returns[7]),
+        float(returns[14]),
+        float(returns[30]),
+        float(vols[1]),
+        float(vols[3]),
+        float(vols[7]),
+        float(vols[14]),
+        float(vols[30]),
+        float(slopes[7]),
+        float(slopes[30]),
+        float(percentile_30d),
+        float(dist_min_30d),
+        float(dist_max_30d),
+        float(bool(market.get("negRisk", False))),
+    ], dtype=np.float32)
+    return np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
 
 
-def _ewm_last(prices: np.ndarray, alpha: float) -> float:
-    """Calcula el último valor del EWM (exponential weighted mean)."""
-    result = float(prices[0])
-    for p in prices[1:]:
-        result = alpha * float(p) + (1 - alpha) * result
-    return result
+def extract_numerical_features_batch(samples: list[dict]) -> np.ndarray:
+    """Extract numerical features for a batch of snapshot samples."""
+    rows = [
+        extract_numerical_features(
+            sample["market"],
+            price_history=sample.get("history"),
+            snapshot_time=sample.get("snapshot_time"),
+            snapshot_price_yes=sample.get("snapshot_price_yes"),
+            days_to_end=sample.get("days_to_end"),
+        )
+        for sample in samples
+    ]
+    return np.stack(rows).astype(np.float32)
 
 
-def _compute_price_at_halflife(
-    price_history: list[dict] | None,
-    market_age_days: float,
-    days_to_resolution: float,
-) -> float:
-    """
-    Precio al ~50% del tiempo de vida del mercado.
+def _coerce_history(price_history: PreparedHistory | list[dict] | None) -> PreparedHistory:
+    if isinstance(price_history, PreparedHistory):
+        return price_history
+    return prepare_price_history(price_history)
 
-    Útil para detectar si el mercado empezó caro y bajó (o viceversa),
-    lo que es informativo para clasificar oportunidades de compra.
-    """
-    if not price_history or len(price_history) < 3:
+
+def _parse_time(value) -> pd.Timestamp | None:
+    if not value:
+        return None
+    try:
+        return pd.to_datetime(value, utc=True)
+    except (ValueError, TypeError):
+        return None
+
+
+def _market_price_fallback(market: dict) -> float:
+    outcome_prices = market.get("outcomePrices", [])
+    if isinstance(outcome_prices, str):
+        try:
+            import json
+
+            outcome_prices = json.loads(outcome_prices)
+        except (ValueError, TypeError):
+            outcome_prices = []
+
+    if isinstance(outcome_prices, list) and outcome_prices:
+        try:
+            return float(outcome_prices[0])
+        except (ValueError, TypeError):
+            pass
+    try:
+        return float(market.get("lastTradePrice") or 0.5)
+    except (ValueError, TypeError):
         return 0.5
 
-    total_life = market_age_days + days_to_resolution
-    if total_life <= 0:
-        return 0.5
 
-    records = sorted(price_history, key=lambda x: x.get("t", 0))
-    t_start = records[0].get("t", 0)
-    t_end = records[-1].get("t", t_start)
-    t_range = t_end - t_start
-    if t_range <= 0:
-        return 0.5
-
-    t_half = t_start + t_range * 0.5
-    # Buscar el registro más cercano al punto medio
-    closest = min(records, key=lambda r: abs(r.get("t", 0) - t_half))
-    return _safe_float(closest.get("p", closest.get("price", 0.5)), default=0.5)
+def _count_points_in_window(history: PreparedHistory, snapshot_ts: int, window_days: int) -> int:
+    if history.is_empty:
+        return 0
+    window_start = snapshot_ts - int(window_days * 86400)
+    idx = int(np.searchsorted(history.timestamps, window_start, side="left"))
+    return int(history.timestamps.size - idx)
 
 
-def _compute_book_features(order_book: dict | None) -> tuple[float, float, float]:
-    """Calcula bid_depth, ask_depth e imbalance del order book."""
-    if not order_book:
+def _window_summary(
+    history: PreparedHistory,
+    snapshot_ts: int,
+    window_days: int,
+    snapshot_price: float,
+) -> tuple[float, float, float]:
+    if history.is_empty:
         return 0.0, 0.0, 0.0
 
-    bids = order_book.get("bids", [])
-    asks = order_book.get("asks", [])
+    window_start = snapshot_ts - int(window_days * 86400)
+    start_price = _price_at_or_before(history, window_start)
+    if start_price is None:
+        start_price = _first_price_after(history, window_start)
+    if start_price is None or start_price <= 0:
+        return 0.0, 0.0, 0.0
 
-    bid_depth = sum(_safe_float(b.get("size", b.get("s", 0))) for b in bids)
-    ask_depth = sum(_safe_float(a.get("size", a.get("s", 0))) for a in asks)
+    actual_prices, actual_timestamps = _window_points(history, window_start)
+    prices_series, ts_series = _series_with_carry(
+        actual_prices,
+        actual_timestamps,
+        carry_price=start_price,
+        window_start=window_start,
+    )
 
-    total = bid_depth + ask_depth
-    imbalance = (bid_depth - ask_depth) / total if total > 0 else 0.0
+    realized_vol = 0.0
+    if prices_series.size >= 2:
+        realized_vol = float(np.std(np.diff(prices_series)))
 
-    return bid_depth, ask_depth, imbalance
+    trend_slope = 0.0
+    if prices_series.size >= 2:
+        x_days = (ts_series - ts_series[0]) / 86400.0
+        if np.unique(x_days).size >= 2:
+            trend_slope = float(np.polyfit(x_days, prices_series, 1)[0])
+
+    total_return = float(snapshot_price / start_price - 1.0) if start_price > 0 else 0.0
+    return total_return, realized_vol, trend_slope
+
+
+def _window_price_position(
+    history: PreparedHistory,
+    snapshot_ts: int,
+    window_days: int,
+    snapshot_price: float,
+) -> tuple[float, float, float]:
+    if history.is_empty:
+        return 0.5, 0.0, 0.0
+
+    window_start = snapshot_ts - int(window_days * 86400)
+    actual_prices, actual_timestamps = _window_points(history, window_start)
+    carry_price = _price_at_or_before(history, window_start)
+    if carry_price is None:
+        carry_price = _first_price_after(history, window_start)
+    if carry_price is None:
+        return 0.5, 0.0, 0.0
+
+    prices_series, _ = _series_with_carry(
+        actual_prices,
+        actual_timestamps,
+        carry_price=carry_price,
+        window_start=window_start,
+    )
+    if prices_series.size == 0:
+        return 0.5, 0.0, 0.0
+
+    percentile = float(np.mean(prices_series <= snapshot_price))
+    min_price = float(np.min(prices_series))
+    max_price = float(np.max(prices_series))
+    return percentile, float(snapshot_price - min_price), float(max_price - snapshot_price)
+
+
+def _series_with_carry(
+    actual_prices: np.ndarray,
+    actual_timestamps: np.ndarray,
+    carry_price: float,
+    window_start: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    if actual_prices.size == 0:
+        return (
+            np.asarray([carry_price], dtype=np.float32),
+            np.asarray([window_start], dtype=np.int64),
+        )
+
+    prices = actual_prices
+    timestamps = actual_timestamps
+    if timestamps[0] > window_start:
+        prices = np.concatenate([np.asarray([carry_price], dtype=np.float32), actual_prices])
+        timestamps = np.concatenate([np.asarray([window_start], dtype=np.int64), actual_timestamps])
+    return prices, timestamps
+
+
+def _window_points(history: PreparedHistory, window_start: int) -> tuple[np.ndarray, np.ndarray]:
+    idx = int(np.searchsorted(history.timestamps, window_start, side="left"))
+    return history.prices[idx:], history.timestamps[idx:]
+
+
+def _price_at_or_before(history: PreparedHistory, ts: int) -> float | None:
+    idx = int(np.searchsorted(history.timestamps, ts, side="right")) - 1
+    if idx < 0:
+        return None
+    return float(history.prices[idx])
+
+
+def _first_price_after(history: PreparedHistory, ts: int) -> float | None:
+    idx = int(np.searchsorted(history.timestamps, ts, side="left"))
+    if idx >= history.prices.size:
+        return None
+    return float(history.prices[idx])

@@ -317,6 +317,11 @@ def infer_resolution_from_market(market: dict) -> str:
     return ""
 
 
+def _infer_resolution_from_market(market: dict) -> str:
+    """Backward-compatible alias kept for older notebooks."""
+    return infer_resolution_from_market(market)
+
+
 def compute_label(
     market: dict,
     snapshot_price_yes: float,

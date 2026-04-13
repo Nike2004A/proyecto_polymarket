@@ -1,201 +1,120 @@
-"""Evaluación del modelo y backtesting."""
+"""Evaluation helpers for the tabular snapshot model."""
 
-import json
-import logging
+from __future__ import annotations
 
 import numpy as np
-import pandas as pd
 import torch
-from torch.utils.data import DataLoader
 
-from .architecture import MarketValueNet
-from .metrics import compute_binary_classification_metrics
-from ..data.preprocessing import (
-    infer_resolution_from_market,
-    build_snapshot_market,
+from .metrics import (
+    clip_probabilities_from_residual,
+    compute_binary_classification_metrics,
+    compute_bucketed_metrics,
+    compute_ev_metrics,
+    compute_probability_metrics,
+    compute_residual_metrics,
+    sigmoid,
 )
-from ..features.pipeline import FeaturePipeline
-
-logger = logging.getLogger(__name__)
 
 
-def evaluate_model(
-    model: MarketValueNet,
-    dataloader: DataLoader,
-    threshold: float = 0.5,
-    device: str | None = None,
-) -> dict:
-    """
-    Evalúa el modelo en un DataLoader.
-
-    Returns:
-        Diccionario con métricas de evaluación.
-    """
+def collect_tabular_outputs(model, dataloader, device: str | None = None) -> dict:
+    """Collect logits, labels, and snapshot metadata from a tabular dataloader."""
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    model = model.to(device)
     model.eval()
-    model.to(device)
 
-    all_labels = []
-    all_scores = []
+    logits = []
+    labels = []
+    prices = []
+    days_to_end = []
+    market_ids = []
+    snapshot_times = []
 
     with torch.no_grad():
         for batch in dataloader:
-            num = batch["numerical"].to(device)
-            cat = batch["category"].to(device)
-            txt = batch["text_emb"].to(device)
-            lbl = batch["label"]
+            batch_logits = model(
+                batch["numerical"].to(device),
+                batch["category"].to(device),
+                batch["text_emb"].to(device),
+            )
+            logits.extend(batch_logits.cpu().numpy())
+            labels.extend(batch["label"].cpu().numpy())
+            if "snapshot_price" in batch:
+                prices.extend(batch["snapshot_price"].cpu().numpy())
+            if "days_to_end" in batch:
+                days_to_end.extend(batch["days_to_end"].cpu().numpy())
+            if "market_id" in batch:
+                market_ids.extend(batch["market_id"])
+            if "snapshot_time" in batch:
+                snapshot_times.extend(batch["snapshot_time"].cpu().numpy())
 
-            scores = model(num, cat, txt).cpu()
-            all_scores.extend(scores.numpy())
-            all_labels.extend(lbl.numpy())
-
-    all_labels = np.array(all_labels)
-    all_scores = np.array(all_scores)
-    results = {"scores": all_scores, "labels": all_labels}
-
-    if model.task == "classification":
-        results = compute_binary_classification_metrics(
-            all_labels,
-            all_scores,
-            threshold=threshold,
-        )
-    else:
-        mse = float(np.mean((all_scores - all_labels) ** 2))
-        mae = float(np.mean(np.abs(all_scores - all_labels)))
-        results.update({"mse": mse, "mae": mae})
-
-    return results
-
-
-def print_evaluation(results: dict) -> None:
-    """Imprime resultados de evaluación."""
-    if "accuracy" in results:
-        print("=== Resultados de Clasificación ===")
-        print(f"  Threshold: {results['threshold']:.4f}")
-        print(f"  Accuracy:  {results['accuracy']:.4f}")
-        print(f"  Precision: {results['precision']:.4f}")
-        print(f"  Recall:    {results['recall']:.4f}")
-        print(f"  F1 Score:  {results['f1']:.4f}")
-        print(f"  ROC AUC:   {results['roc_auc']:.4f}")
-        print(f"  PR AUC:    {results['pr_auc']:.4f}")
-        print(f"\n{results['classification_report']}")
-    else:
-        print("=== Resultados de Regresión ===")
-        print(f"  MSE: {results['mse']:.6f}")
-        print(f"  MAE: {results['mae']:.6f}")
+    return {
+        "logits": np.asarray(logits, dtype=np.float32),
+        "labels": np.asarray(labels, dtype=np.float32),
+        "market_prices": np.asarray(prices, dtype=np.float32),
+        "days_to_end": np.asarray(days_to_end, dtype=np.float32),
+        "market_ids": np.asarray(market_ids, dtype=object),
+        "snapshot_times": np.asarray(snapshot_times, dtype=np.int64),
+    }
 
 
-def backtest(
-    model: MarketValueNet,
-    historical_markets: list[dict],
-    feature_pipeline: FeaturePipeline,
-    price_histories: dict | None = None,
-    initial_capital: float = 1000.0,
-    position_size: float = 0.05,
-    threshold: float = 0.6,
-    snapshot_offset_days: int = 7,
-    use_adaptive_cutoff: bool = True,
+def evaluate_model(
+    model,
+    dataloader,
+    calibrator=None,
+    top_k: int = 20,
+    prediction_mode: str = "classification",
+    roi_cap: float | None = None,
     device: str | None = None,
-) -> tuple[pd.DataFrame, float]:
-    """
-    Simula trading con el modelo sobre datos históricos.
-
-    Args:
-        model: Modelo entrenado.
-        historical_markets: Lista de mercados resueltos.
-        feature_pipeline: Pipeline de features.
-        price_histories: Historiales keyed por market_id para reconstruir
-            snapshots anti-leakage.
-        initial_capital: Capital inicial.
-        position_size: Fracción del capital por trade.
-        threshold: Umbral mínimo del modelo para comprar.
-        snapshot_offset_days: Días antes del endDate para el snapshot.
-        device: Dispositivo de cómputo.
-
-    Returns:
-        (DataFrame de trades, capital final)
-    """
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    model.eval()
-    model.to(device)
-
-    capital = initial_capital
-    trades = []
-
-    if price_histories is None:
-        logger.warning(
-            "Backtest sin price_histories: se omitirán mercados sin snapshot válido."
+    threshold: float | None = None,
+) -> dict:
+    outputs = collect_tabular_outputs(model, dataloader, device=device)
+    if prediction_mode == "residual":
+        raw_probs = clip_probabilities_from_residual(outputs["logits"], outputs["market_prices"])
+        calibrated_probs = calibrator.predict_proba(raw_probs) if calibrator is not None else raw_probs
+        residual_metrics = compute_residual_metrics(
+            outputs["labels"],
+            outputs["market_prices"],
+            outputs["logits"],
         )
+    else:
+        raw_probs = sigmoid(outputs["logits"])
+        calibrated_probs = calibrator.predict_proba(outputs["logits"]) if calibrator is not None else raw_probs
+        residual_metrics = {}
 
-    for market in historical_markets:
-        market_id = market.get("id", "?")
-        try:
-            snapshot_market, snapshot_price = build_snapshot_market(
-                market,
-                price_histories=price_histories,
-                snapshot_offset_days=snapshot_offset_days,
-                use_adaptive_cutoff=use_adaptive_cutoff,
-            )
-            if snapshot_market is None or snapshot_price is None:
-                continue
-
-            history = None
-            if price_histories is not None:
-                history = price_histories.get(str(market_id))
-
-            features = feature_pipeline.transform_single(
-                snapshot_market,
-                price_history=history,
-            )
-            num_tensor = (
-                torch.FloatTensor(features["numerical"]).unsqueeze(0).to(device)
-            )
-            cat_tensor = torch.LongTensor([features["category_id"]]).to(device)
-            txt_tensor = (
-                torch.FloatTensor(features["text_embedding"]).unsqueeze(0).to(device)
-            )
-
-            with torch.no_grad():
-                score = model(num_tensor, cat_tensor, txt_tensor).item()
-
-            if score > threshold:
-                price = float(snapshot_price)
-                if price <= 0 or price >= 1:
-                    continue
-
-                bet_amount = capital * position_size
-                shares = bet_amount / price
-                # market.get("resolution") es siempre None en la API.
-                # Inferir de outcomePrices: [1,0] = Yes, [0,1] = No.
-                resolution = infer_resolution_from_market(market)
-                payout = shares * (1.0 if resolution == "yes" else 0.0)
-                pnl = payout - bet_amount
-                capital += pnl
-
-                trades.append({
-                    "market_id": market_id,
-                    "question": market.get("question", "")[:80],
-                    "price_yes": price,
-                    "snapshot_offset_days": snapshot_offset_days,
-                    "score": score,
-                    "resolution": resolution,
-                    "bet_amount": bet_amount,
-                    "pnl": pnl,
-                    "capital_after": capital,
-                })
-        except Exception as e:
-            logger.warning(
-                "Backtest: market %s omitido: %s",
-                market_id, e,
-            )
-            continue
-
-    if not trades:
-        logger.warning("Backtest: no se ejecutó ningún trade.")
-
-    trades_df = pd.DataFrame(trades)
-    return trades_df, capital
+    results = {
+        "labels": outputs["labels"],
+        "logits": outputs["logits"],
+        "raw_probs": raw_probs,
+        "calibrated_probs": calibrated_probs,
+        "market_prices": outputs["market_prices"],
+        "days_to_end": outputs["days_to_end"],
+        "market_ids": outputs["market_ids"],
+        "snapshot_times": outputs["snapshot_times"],
+        "prediction_mode": prediction_mode,
+        "raw_metrics": compute_probability_metrics(outputs["labels"], raw_probs),
+        "calibrated_metrics": compute_probability_metrics(outputs["labels"], calibrated_probs),
+        "market_baseline_metrics": compute_probability_metrics(outputs["labels"], outputs["market_prices"]),
+        "residual_metrics": residual_metrics,
+        "ev_metrics": compute_ev_metrics(
+            outputs["labels"],
+            outputs["market_prices"],
+            calibrated_probs,
+            top_k=top_k,
+            roi_cap=roi_cap,
+        ),
+        "by_horizon": compute_bucketed_metrics(
+            outputs["labels"],
+            outputs["market_prices"],
+            calibrated_probs,
+            outputs["days_to_end"],
+            top_k=top_k,
+            roi_cap=roi_cap,
+        ),
+    }
+    if threshold is not None:
+        binary_metrics = compute_binary_classification_metrics(outputs["labels"], calibrated_probs, threshold=threshold)
+        results.update(binary_metrics)
+        results["scores"] = calibrated_probs
+    return results

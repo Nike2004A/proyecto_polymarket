@@ -1,76 +1,29 @@
-"""API pública ligera para los módulos de modelado."""
+"""Public API for snapshot-based modeling modules."""
+
+from .architecture import MarketValueNet
+from .calibration import ProbabilityCalibrator
+from .dataset import PolymarketDataset, create_train_val_test_dataloaders
+from .evaluate import evaluate_model
+from .gbdt_train import train_gbdt_pipeline
+from .train import train_model, train_tabular_pipeline
+from .ts_architecture import PriceSequenceGRU
+from .ts_dataset import TimeSeriesMarketDataset, create_ts_train_val_test_dataloaders
+from .ts_evaluate import evaluate_ts_model
+from .ts_train import train_ts_model, train_ts_pipeline
 
 __all__ = [
     "MarketValueNet",
+    "ProbabilityCalibrator",
     "PolymarketDataset",
-    "create_dataloaders",
     "create_train_val_test_dataloaders",
-    "train_model",
     "evaluate_model",
-    "backtest",
+    "train_gbdt_pipeline",
+    "train_model",
+    "train_tabular_pipeline",
     "PriceSequenceGRU",
     "TimeSeriesMarketDataset",
-    "create_ts_dataloaders",
     "create_ts_train_val_test_dataloaders",
     "evaluate_ts_model",
     "train_ts_model",
+    "train_ts_pipeline",
 ]
-
-
-def __getattr__(name: str):
-    if name == "MarketValueNet":
-        from .architecture import MarketValueNet
-
-        return MarketValueNet
-    if name in {"PolymarketDataset", "create_dataloaders", "create_train_val_test_dataloaders"}:
-        from .dataset import (
-            PolymarketDataset,
-            create_dataloaders,
-            create_train_val_test_dataloaders,
-        )
-
-        return {
-            "PolymarketDataset": PolymarketDataset,
-            "create_dataloaders": create_dataloaders,
-            "create_train_val_test_dataloaders": create_train_val_test_dataloaders,
-        }[name]
-    if name in {"train_model"}:
-        from .train import train_model
-
-        return train_model
-    if name in {"evaluate_model", "backtest"}:
-        from .evaluate import evaluate_model, backtest
-
-        return {
-            "evaluate_model": evaluate_model,
-            "backtest": backtest,
-        }[name]
-    if name == "PriceSequenceGRU":
-        from .ts_architecture import PriceSequenceGRU
-
-        return PriceSequenceGRU
-    if name in {
-        "TimeSeriesMarketDataset",
-        "create_ts_dataloaders",
-        "create_ts_train_val_test_dataloaders",
-    }:
-        from .ts_dataset import (
-            TimeSeriesMarketDataset,
-            create_ts_dataloaders,
-            create_ts_train_val_test_dataloaders,
-        )
-
-        return {
-            "TimeSeriesMarketDataset": TimeSeriesMarketDataset,
-            "create_ts_dataloaders": create_ts_dataloaders,
-            "create_ts_train_val_test_dataloaders": create_ts_train_val_test_dataloaders,
-        }[name]
-    if name == "evaluate_ts_model":
-        from .ts_evaluate import evaluate_ts_model
-
-        return evaluate_ts_model
-    if name == "train_ts_model":
-        from .ts_train import train_ts_model
-
-        return train_ts_model
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

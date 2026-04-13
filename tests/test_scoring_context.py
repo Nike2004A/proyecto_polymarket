@@ -1,13 +1,18 @@
 import unittest
 
 import numpy as np
+import pandas as pd
 import torch
 
+from src.data.snapshots import prepare_price_history
+from src.features.numerical import NUM_NUMERICAL_FEATURES
 from src.scoring.scorer import score_active_markets
 
 
-class ConstantScoreModel:
-    task = "classification"
+class ConstantTabularModel(torch.nn.Module):
+    def __init__(self, logit: float = 1.2):
+        super().__init__()
+        self.logit = logit
 
     def eval(self):
         return self
@@ -15,48 +20,41 @@ class ConstantScoreModel:
     def to(self, device):
         return self
 
-    def __call__(self, numerical, category, text_embedding):
-        return torch.tensor([0.7], dtype=torch.float32)
+    def forward(self, numerical, category, text_embedding):
+        batch_size = numerical.shape[0]
+        return torch.full((batch_size,), self.logit, dtype=torch.float32, device=numerical.device)
+
+
+class ConstantCalibrator:
+    def __init__(self, probability: float):
+        self.probability = probability
+
+    def predict_proba(self, logits):
+        logits = np.asarray(logits)
+        return np.full(logits.shape[0], self.probability, dtype=np.float64)
 
 
 class SpyFeaturePipeline:
     def __init__(self):
         self.calls = []
 
-    def transform_single(self, market, price_history=None, order_book=None):
+    def warm_text_cache(self, markets):
+        return None
+
+    def transform_single(self, market, price_history=None, snapshot_time=None, days_to_end=None):
         self.calls.append(
             {
                 "market_id": market["id"],
                 "price_history": price_history,
-                "order_book": order_book,
+                "snapshot_time": snapshot_time,
+                "days_to_end": days_to_end,
             }
         )
         return {
-            "numerical": np.zeros(23, dtype=np.float32),
+            "numerical": np.zeros(NUM_NUMERICAL_FEATURES, dtype=np.float32),
             "category_id": 0,
-            "text_embedding": np.zeros(384, dtype=np.float32),
+            "text_embedding": np.zeros(16, dtype=np.float32),
         }
-
-
-class FakeClient:
-    def __init__(self, markets):
-        self.markets = markets
-        self.history_calls = []
-        self.book_calls = []
-
-    def get_all_active_markets(self, max_markets=1000):
-        return self.markets[:max_markets]
-
-    def parse_market(self, market):
-        return market
-
-    def get_price_history(self, token_id):
-        self.history_calls.append(token_id)
-        return [{"t": 1, "p": 0.4}, {"t": 2, "p": 0.5}]
-
-    def get_order_book(self, token_id):
-        self.book_calls.append(token_id)
-        return {"bids": [{"s": 10}], "asks": [{"s": 5}]}
 
 
 class ScoringContextTests(unittest.TestCase):
@@ -64,7 +62,6 @@ class ScoringContextTests(unittest.TestCase):
         self.market = {
             "id": "m1",
             "question": "Will X happen?",
-            "clobTokenIds": ["token-1"],
             "outcomePrices": [0.42, 0.58],
             "volume24hr": 1500,
             "liquidity": 5000,
@@ -72,58 +69,52 @@ class ScoringContextTests(unittest.TestCase):
             "slug": "will-x-happen",
             "endDate": "2026-01-10T00:00:00Z",
         }
-        self.model = ConstantScoreModel()
+        self.snapshot_time = pd.Timestamp("2026-01-09T00:00:00Z")
+        self.history = prepare_price_history([
+            {"t": "2026-01-07T00:00:00Z", "p": 0.30},
+            {"t": "2026-01-09T00:00:00Z", "p": 0.40},
+            {"t": "2026-01-10T00:00:00Z", "p": 0.95},
+        ])
+        self.bundle = {
+            "model_name": "market_value_baseline",
+            "model": ConstantTabularModel(),
+            "pipeline": SpyFeaturePipeline(),
+            "calibrator": ConstantCalibrator(0.80),
+            "run_config": {},
+        }
 
-    def test_scoring_uses_cached_history_and_order_book_when_present(self):
-        client = FakeClient([self.market])
-        pipeline = SpyFeaturePipeline()
-
+    def test_scoring_uses_snapshot_history_and_emits_ev_columns(self):
         df = score_active_markets(
-            self.model,
-            client,
-            pipeline,
-            price_histories={"m1": [{"t": 1, "p": 0.4}]},
-            order_books={"m1": {"bids": [{"s": 1}], "asks": [{"s": 2}]}},
-            fetch_missing_context=False,
-            max_markets=1,
+            self.bundle,
+            active_markets=[self.market],
+            price_histories={"m1": self.history},
+            snapshot_time=self.snapshot_time,
+            top_k=5,
         )
 
         self.assertEqual(len(df), 1)
-        self.assertEqual(len(pipeline.calls), 1)
-        self.assertEqual(pipeline.calls[0]["price_history"], [{"t": 1, "p": 0.4}])
-        self.assertEqual(
-            pipeline.calls[0]["order_book"],
-            {"bids": [{"s": 1}], "asks": [{"s": 2}]},
-        )
-        self.assertEqual(client.history_calls, [])
-        self.assertEqual(client.book_calls, [])
+        self.assertEqual(len(self.bundle["pipeline"].calls), 1)
+        self.assertIs(self.bundle["pipeline"].calls[0]["price_history"], self.history)
+        self.assertEqual(self.bundle["pipeline"].calls[0]["snapshot_time"], self.snapshot_time)
+        self.assertEqual(self.bundle["pipeline"].calls[0]["days_to_end"], 1.0)
 
-    def test_scoring_fetches_missing_context_when_cache_is_absent(self):
-        client = FakeClient([self.market])
-        pipeline = SpyFeaturePipeline()
-
-        df = score_active_markets(
-            self.model,
-            client,
-            pipeline,
-            price_histories={},
-            order_books={},
-            fetch_missing_context=True,
-            max_markets=1,
-        )
-
-        self.assertEqual(len(df), 1)
-        self.assertEqual(len(pipeline.calls), 1)
-        self.assertEqual(
-            pipeline.calls[0]["price_history"],
-            [{"t": 1, "p": 0.4}, {"t": 2, "p": 0.5}],
-        )
-        self.assertEqual(
-            pipeline.calls[0]["order_book"],
-            {"bids": [{"s": 10}], "asks": [{"s": 5}]},
-        )
-        self.assertEqual(client.history_calls, ["token-1"])
-        self.assertEqual(client.book_calls, ["token-1"])
+        row = df.iloc[0]
+        self.assertEqual(row["model_name"], "market_value_baseline")
+        self.assertAlmostEqual(float(row["price_yes"]), 0.40, places=6)
+        self.assertAlmostEqual(float(row["p_yes_calibrated"]), 0.80, places=6)
+        self.assertAlmostEqual(float(row["ev_per_share"]), 0.40, places=6)
+        self.assertAlmostEqual(float(row["expected_roi"]), 1.0, places=6)
+        self.assertAlmostEqual(float(row["days_to_end"]), 1.0, places=6)
+        self.assertEqual(row["signal"], "STRONG BUY")
+        for required in [
+            "p_yes_raw",
+            "p_yes_calibrated",
+            "ev_per_share",
+            "expected_roi",
+            "days_to_end",
+            "signal",
+        ]:
+            self.assertIn(required, df.columns)
 
 
 if __name__ == "__main__":

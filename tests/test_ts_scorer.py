@@ -1,12 +1,18 @@
 import unittest
 
+import numpy as np
+import pandas as pd
 import torch
 
-from src.scoring.ts_scorer import score_active_markets_ts
+from src.data.snapshots import prepare_price_history
+from src.features.numerical import NUM_NUMERICAL_FEATURES
+from src.scoring.scorer import score_active_markets
 
 
-class ConstantTSModel:
-    task = "classification"
+class ConstantTSModel(torch.nn.Module):
+    def __init__(self, logit: float = 0.9):
+        super().__init__()
+        self.logit = logit
 
     def eval(self):
         return self
@@ -14,32 +20,39 @@ class ConstantTSModel:
     def to(self, device):
         return self
 
-    def __call__(self, sequences, lengths):
-        return torch.tensor([0.82], dtype=torch.float32)
+    def forward(self, sequences, lengths, static_numerical, category_ids, text_embeddings):
+        batch_size = sequences.shape[0]
+        return torch.full((batch_size,), self.logit, dtype=torch.float32, device=sequences.device)
 
 
-class FakeClient:
-    def __init__(self, markets):
-        self.markets = markets
-        self.history_calls = []
+class ConstantCalibrator:
+    def __init__(self, probability: float):
+        self.probability = probability
 
-    def get_all_active_markets(self, max_markets=1000):
-        return self.markets[:max_markets]
+    def predict_proba(self, logits):
+        logits = np.asarray(logits)
+        return np.full(logits.shape[0], self.probability, dtype=np.float64)
 
-    def parse_market(self, market):
-        return market
 
-    def get_price_history(self, token_id):
-        self.history_calls.append(token_id)
-        if token_id == "token-1":
-            return [
-                {"t": 1, "p": 0.30},
-                {"t": 2, "p": 0.32},
-                {"t": 3, "p": 0.35},
-                {"t": 4, "p": 0.34},
-                {"t": 5, "p": 0.36},
-            ]
-        return [{"t": 1, "p": 0.5}]
+class SpyFeaturePipeline:
+    def __init__(self):
+        self.calls = []
+
+    def warm_text_cache(self, markets):
+        return None
+
+    def transform_single(self, market, price_history=None, snapshot_time=None, days_to_end=None):
+        self.calls.append({
+            "market_id": market["id"],
+            "price_history": price_history,
+            "snapshot_time": snapshot_time,
+            "days_to_end": days_to_end,
+        })
+        return {
+            "numerical": np.zeros(NUM_NUMERICAL_FEATURES, dtype=np.float32),
+            "category_id": 0,
+            "text_embedding": np.zeros(16, dtype=np.float32),
+        }
 
 
 class TimeSeriesScorerTests(unittest.TestCase):
@@ -59,7 +72,6 @@ class TimeSeriesScorerTests(unittest.TestCase):
             {
                 "id": "m2",
                 "question": "Will Y happen?",
-                "clobTokenIds": ["token-2"],
                 "outcomePrices": [0.61, 0.39],
                 "volume24hr": 800,
                 "liquidity": 2000,
@@ -68,54 +80,41 @@ class TimeSeriesScorerTests(unittest.TestCase):
                 "endDate": "2026-01-11T00:00:00Z",
             },
         ]
-        self.model = ConstantTSModel()
-
-    def test_ts_scorer_omits_markets_with_insufficient_history(self):
-        client = FakeClient(self.markets)
-        histories = {
-            "m1": [
-                {"t": 1, "p": 0.30},
-                {"t": 2, "p": 0.32},
-                {"t": 3, "p": 0.35},
-                {"t": 4, "p": 0.34},
-                {"t": 5, "p": 0.36},
-            ],
-            "m2": [
-                {"t": 1, "p": 0.60},
-                {"t": 2, "p": 0.61},
-            ],
+        self.snapshot_time = pd.Timestamp("2026-01-09T00:00:00Z")
+        self.pipeline = SpyFeaturePipeline()
+        self.bundle = {
+            "model_name": "price_sequence_gru",
+            "model": ConstantTSModel(),
+            "pipeline": self.pipeline,
+            "calibrator": ConstantCalibrator(0.78),
+            "run_config": {"dataset_metadata": {"sequence_lookback_days": 60, "sequence_grid_hours": 24}},
         }
 
-        df = score_active_markets_ts(
-            self.model,
-            client,
+    def test_ts_bundle_scores_active_markets_and_skips_missing_history(self):
+        histories = {
+            "m1": prepare_price_history([
+                {"t": "2025-12-20T00:00:00Z", "p": 0.30},
+                {"t": "2025-12-28T00:00:00Z", "p": 0.32},
+                {"t": "2026-01-03T00:00:00Z", "p": 0.35},
+                {"t": "2026-01-08T12:00:00Z", "p": 0.40},
+            ]),
+        }
+
+        df = score_active_markets(
+            self.bundle,
+            active_markets=self.markets,
             price_histories=histories,
-            fetch_missing_history=False,
+            snapshot_time=self.snapshot_time,
             top_k=10,
-            max_markets=2,
-            min_points=5,
         )
 
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]["id"], "m1")
-        self.assertEqual(client.history_calls, [])
-
-    def test_ts_scorer_fetches_missing_history_when_needed(self):
-        client = FakeClient(self.markets)
-
-        df = score_active_markets_ts(
-            self.model,
-            client,
-            price_histories={},
-            fetch_missing_history=True,
-            top_k=10,
-            max_markets=2,
-            min_points=5,
-        )
-
-        self.assertEqual(len(df), 1)
-        self.assertEqual(df.iloc[0]["id"], "m1")
-        self.assertEqual(client.history_calls, ["token-1", "token-2"])
+        self.assertAlmostEqual(float(df.iloc[0]["price_yes"]), 0.40, places=6)
+        self.assertAlmostEqual(float(df.iloc[0]["p_yes_calibrated"]), 0.78, places=6)
+        self.assertEqual(df.iloc[0]["signal"], "STRONG BUY")
+        self.assertEqual(len(self.pipeline.calls), 2)
+        self.assertEqual(self.pipeline.calls[0]["days_to_end"], 1.0)
 
 
 if __name__ == "__main__":
