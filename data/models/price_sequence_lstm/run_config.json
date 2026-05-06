@@ -1,0 +1,189 @@
+{
+  "model_name": "price_sequence_lstm",
+  "data_dir": "data/processed_ts",
+  "save_dir": "data/models/price_sequence_lstm",
+  "epochs": 30,
+  "learning_rate": 0.001,
+  "batch_size": 256,
+  "patience": 6,
+  "seed": 42,
+  "weight_decay": 0.0001,
+  "grad_clip": 1.0,
+  "prediction_mode": "residual",
+  "split": {
+    "strategy": "temporal_grouped",
+    "seed": 42,
+    "val_split": 0.15,
+    "test_split": 0.15,
+    "train_size": 27683,
+    "val_size": 5935,
+    "test_size": 5927,
+    "temporal_cutoffs": {
+      "val_start_timestamp": 1775743200,
+      "test_start_timestamp": 1776528000
+    },
+    "class_balance": {
+      "train_positive_rate": 0.3186432123184204,
+      "val_positive_rate": 0.41752317547798157,
+      "test_positive_rate": 0.17850515246391296
+    }
+  },
+  "dataset_metadata": {
+    "num_samples": 39545,
+    "num_markets": 13373,
+    "snapshot_horizons_days": [
+      1,
+      3,
+      7,
+      14,
+      30
+    ],
+    "sequence_lookback_days": 30,
+    "sequence_grid_hours": 12,
+    "tabular_feature_names": [
+      "snapshot_price_yes",
+      "days_to_end",
+      "market_age_days_at_snapshot",
+      "days_since_last_trade",
+      "history_points_1d",
+      "history_points_3d",
+      "history_points_7d",
+      "history_points_30d",
+      "history_span_days",
+      "return_1d",
+      "return_3d",
+      "return_7d",
+      "return_14d",
+      "return_30d",
+      "realized_vol_1d",
+      "realized_vol_3d",
+      "realized_vol_7d",
+      "realized_vol_14d",
+      "realized_vol_30d",
+      "trend_slope_7d",
+      "trend_slope_30d",
+      "price_percentile_30d",
+      "distance_to_30d_min",
+      "distance_to_30d_max",
+      "neg_risk"
+    ],
+    "sequence_feature_names": [
+      "price_yes_ffill",
+      "delta_price",
+      "observed_mask"
+    ],
+    "skipped": {
+      "missing_history": 0,
+      "no_valid_horizons": 10627,
+      "no_sequence": 0,
+      "ambiguous": 0
+    },
+    "market_positive_rate": 0.3124794661998749,
+    "target_name": "residual_yes_minus_price",
+    "benchmark": "market_price_yes"
+  },
+  "model": {
+    "architecture": "lstm",
+    "input_dim": 3,
+    "static_num_features": 25,
+    "num_categories": 10,
+    "category_embed_dim": 8,
+    "hidden_dim": 128,
+    "static_hidden_dim": 128,
+    "num_layers": 2,
+    "dropout": 0.3
+  },
+  "calibration": {
+    "selected": "isotonic",
+    "tolerance": 0.005,
+    "candidates": {
+      "identity": {
+        "brier": 0.11982953109387835,
+        "log_loss": 0.46038372236467623,
+        "positive_rate": 0.4175231676495366,
+        "mean_probability": 0.3476640936996911,
+        "ece": 0.08584994118741998,
+        "roc_auc": 0.929064982140785,
+        "pr_auc": 0.9167953909302108
+      },
+      "platt": {
+        "brier": 0.11563973126229651,
+        "log_loss": 0.3710099937095177,
+        "positive_rate": 0.4175231676495366,
+        "mean_probability": 0.41754577844924373,
+        "ece": 0.037629410367546065,
+        "roc_auc": 0.929064982140785,
+        "pr_auc": 0.9167953909302108
+      },
+      "isotonic": {
+        "brier": 0.10027253609106236,
+        "log_loss": 0.30531511849969767,
+        "positive_rate": 0.4175231676495366,
+        "mean_probability": 0.4175231676495366,
+        "ece": 2.19612776901421e-17,
+        "roc_auc": 0.931018709509171,
+        "pr_auc": 0.9097164222345108
+      }
+    }
+  },
+  "search_results": [
+    {
+      "candidate": 1,
+      "model": {
+        "category_embed_dim": 8,
+        "hidden_dim": 128,
+        "static_hidden_dim": 128,
+        "num_layers": 1,
+        "dropout": 0.2
+      },
+      "selected_calibration": "isotonic",
+      "best_epoch": 4,
+      "best_val_loss": 0.1534086869408687,
+      "validation": {
+        "brier": 0.10833040439790274,
+        "log_loss": 0.3413056130100767,
+        "top_k_avg_realized_pnl": -0.05299500146298669,
+        "top_k_hit_rate": 0.21
+      }
+    },
+    {
+      "candidate": 2,
+      "model": {
+        "category_embed_dim": 8,
+        "hidden_dim": 64,
+        "static_hidden_dim": 128,
+        "num_layers": 1,
+        "dropout": 0.2
+      },
+      "selected_calibration": "isotonic",
+      "best_epoch": 3,
+      "best_val_loss": 0.1512730233274245,
+      "validation": {
+        "brier": 0.10158460182089198,
+        "log_loss": 0.3138550011491616,
+        "top_k_avg_realized_pnl": -0.03416000064753462,
+        "top_k_hit_rate": 0.24
+      }
+    },
+    {
+      "candidate": 3,
+      "model": {
+        "category_embed_dim": 8,
+        "hidden_dim": 128,
+        "static_hidden_dim": 128,
+        "num_layers": 2,
+        "dropout": 0.3
+      },
+      "selected_calibration": "isotonic",
+      "best_epoch": 4,
+      "best_val_loss": 0.1509983864137515,
+      "validation": {
+        "brier": 0.10027253609106236,
+        "log_loss": 0.30531511849969767,
+        "top_k_avg_realized_pnl": -0.01885500027157832,
+        "top_k_hit_rate": 0.25
+      }
+    }
+  ],
+  "selection_metric": "topk_ev"
+}
