@@ -7,10 +7,10 @@ from .dataset import PolymarketDataset, create_train_val_test_dataloaders
 from .evaluate import evaluate_model
 from .gbdt_train import train_gbdt_pipeline
 from .train import train_model, train_tabular_pipeline
-from .ts_architecture import PriceSequenceGRU
+from .ts_architecture import PriceSequenceGRU, PriceSequenceLSTM
 from .ts_dataset import TimeSeriesMarketDataset, create_ts_train_val_test_dataloaders
 from .ts_evaluate import evaluate_ts_model
-from .ts_train import train_ts_model, train_ts_pipeline
+from .ts_train import train_lstm_pipeline, train_ts_model, train_ts_pipeline
 
 __all__ = [
     "MarketValueNet",
@@ -23,9 +23,11 @@ __all__ = [
     "train_model",
     "train_tabular_pipeline",
     "PriceSequenceGRU",
+    "PriceSequenceLSTM",
     "TimeSeriesMarketDataset",
     "create_ts_train_val_test_dataloaders",
     "evaluate_ts_model",
+    "train_lstm_pipeline",
     "train_ts_model",
     "train_ts_pipeline",
 ]

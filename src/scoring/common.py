@@ -16,7 +16,7 @@ from ..features.pipeline import FeaturePipeline
 from ..model.architecture import MarketValueNet
 from ..model.calibration import ProbabilityCalibrator
 from ..model.metrics import sigmoid
-from ..model.ts_architecture import PriceSequenceGRU
+from ..model.ts_architecture import PriceSequenceGRU, PriceSequenceLSTM
 
 
 def get_models_registry_dir(models_root: str | Path) -> Path:
@@ -104,13 +104,27 @@ def load_tabular_bundle(model_dir: str | Path, pipeline_dir: str | Path) -> dict
     }
 
 
-def load_ts_bundle(model_dir: str | Path, pipeline_dir: str | Path) -> dict:
+def load_sequence_bundle(
+    model_dir: str | Path,
+    pipeline_dir: str | Path,
+    *,
+    default_architecture: str = "gru",
+    default_model_name: str = "price_sequence_gru",
+) -> dict:
     model_path = Path(model_dir)
     with open(model_path / "run_config.json", encoding="utf-8") as f:
         run_config = json.load(f)
 
     pipeline = FeaturePipeline.load(str(pipeline_dir))
-    model = PriceSequenceGRU(
+    architecture = run_config.get("model", {}).get("architecture", default_architecture)
+    if architecture == "gru":
+        model_cls = PriceSequenceGRU
+    elif architecture == "lstm":
+        model_cls = PriceSequenceLSTM
+    else:
+        raise ValueError(f"Arquitectura secuencial no soportada: {architecture}")
+
+    model = model_cls(
         input_dim=run_config["model"]["input_dim"],
         static_num_features=run_config["model"]["static_num_features"],
         num_categories=run_config["model"].get("num_categories", 10),
@@ -122,17 +136,38 @@ def load_ts_bundle(model_dir: str | Path, pipeline_dir: str | Path) -> dict:
         dropout=run_config["model"]["dropout"],
         task="classification",
     )
-    model.load_state_dict(torch.load(model_path / "best_ts_gru_model.pt", map_location="cpu", weights_only=True))
+    checkpoint = model_path / f"best_ts_{architecture}_model.pt"
+    if not checkpoint.exists() and architecture == "gru":
+        checkpoint = model_path / "best_ts_gru_model.pt"
+    model.load_state_dict(torch.load(checkpoint, map_location="cpu", weights_only=True))
     calibration_dir = model_path / "calibration"
     calibrator = ProbabilityCalibrator.load(calibration_dir) if calibration_dir.exists() else None
     return {
-        "model_name": "price_sequence_gru",
+        "model_name": run_config.get("model_name", default_model_name),
         "model": model,
         "pipeline": pipeline,
         "calibrator": calibrator,
         "prediction_mode": run_config.get("prediction_mode", "classification"),
         "run_config": run_config,
     }
+
+
+def load_ts_bundle(model_dir: str | Path, pipeline_dir: str | Path) -> dict:
+    return load_sequence_bundle(
+        model_dir,
+        pipeline_dir,
+        default_architecture="gru",
+        default_model_name="price_sequence_gru",
+    )
+
+
+def load_lstm_bundle(model_dir: str | Path, pipeline_dir: str | Path) -> dict:
+    return load_sequence_bundle(
+        model_dir,
+        pipeline_dir,
+        default_architecture="lstm",
+        default_model_name="price_sequence_lstm",
+    )
 
 
 def load_gbdt_bundle(model_dir: str | Path, pipeline_dir: str | Path) -> dict:

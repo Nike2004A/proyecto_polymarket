@@ -116,6 +116,23 @@ ts_model:
   num_layers: 1
   dropout: 0.2
 
+lstm_model:
+  category_embed_dim: 8
+  hidden_dim: 128
+  static_hidden_dim: 128
+  num_layers: 1
+  dropout: 0.2
+  candidate_configs:
+    - hidden_dim: 128
+      num_layers: 1
+      dropout: 0.2
+    - hidden_dim: 64
+      num_layers: 1
+      dropout: 0.2
+    - hidden_dim: 128
+      num_layers: 2
+      dropout: 0.3
+
 training:
   epochs: 24
   learning_rate: 0.001
@@ -137,6 +154,19 @@ ts_training:
   patience: 5
   seed: 42
   save_dir: "data/models/price_sequence_gru"
+
+lstm_training:
+  epochs: 30
+  learning_rate: 0.001
+  batch_size: 256
+  val_split: 0.15
+  test_split: 0.15
+  split_strategy: "temporal_grouped"
+  patience: 6
+  seed: 42
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  save_dir: "data/models/price_sequence_lstm"
 
 scoring:
   top_k: 100

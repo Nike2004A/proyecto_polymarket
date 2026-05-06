@@ -17,6 +17,7 @@ from .common import (
     load_active_context,
     load_catboost_bundle,
     load_gbdt_bundle,
+    load_lstm_bundle,
     load_primary_model_info,
     load_tabular_bundle,
     load_ts_bundle,
@@ -70,7 +71,7 @@ def score_active_markets(
     prediction_mode = bundle.get("prediction_mode", "classification")
     pipeline.warm_text_cache(active_markets)
 
-    ts_cfg = bundle["run_config"].get("dataset_metadata", {}) if model_name == "price_sequence_gru" else {}
+    ts_cfg = bundle["run_config"].get("dataset_metadata", {}) if model_name in {"price_sequence_gru", "price_sequence_lstm"} else {}
     lookback_days = ts_cfg.get("sequence_lookback_days", 30)
     step_hours = ts_cfg.get("sequence_grid_hours", 12)
 
@@ -231,6 +232,8 @@ def load_bundle_by_name(name: str, models_root: str | Path, pipeline_dir: str | 
         return load_tabular_bundle(models_path / "market_value_baseline", pipeline_dir)
     if name == "price_sequence_gru":
         return load_ts_bundle(models_path / "price_sequence_gru", pipeline_dir)
+    if name == "price_sequence_lstm":
+        return load_lstm_bundle(models_path / "price_sequence_lstm", pipeline_dir)
     if name == "hist_gradient_boosting":
         return load_gbdt_bundle(models_path / "hist_gradient_boosting", pipeline_dir)
     if name == "catboost_residual":
@@ -268,7 +271,18 @@ def main() -> None:
 
     model_names: list[str]
     if args.all_models:
-        model_names = ["market_value_baseline", "price_sequence_gru", "hist_gradient_boosting", "catboost_residual"]
+        candidate_model_names = [
+            "market_value_baseline",
+            "price_sequence_gru",
+            "price_sequence_lstm",
+            "hist_gradient_boosting",
+            "catboost_residual",
+        ]
+        model_names = [
+            name
+            for name in candidate_model_names
+            if (Path(models_root) / name / "run_config.json").exists()
+        ]
     else:
         primary = load_primary_model_info(models_root)
         model_names = [primary["name"]] if primary else ["hist_gradient_boosting"]

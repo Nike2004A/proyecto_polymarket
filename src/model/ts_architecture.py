@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import torch
 import torch.nn as nn
+import torch
 from torch.nn.utils.rnn import pack_padded_sequence
 
 
-class PriceSequenceGRU(nn.Module):
-    """GRU over fixed-grid sequences plus snapshot-compatible static context."""
-
+class _PriceSequenceRNNBase(nn.Module):
     def __init__(
         self,
+        rnn_cls: type[nn.GRU] | type[nn.LSTM],
+        rnn_attr_name: str,
         input_dim: int,
         static_num_features: int,
         num_categories: int = 10,
@@ -25,13 +25,15 @@ class PriceSequenceGRU(nn.Module):
     ):
         super().__init__()
         self.task = task
-        self.gru = nn.GRU(
+        self._rnn_attr_name = rnn_attr_name
+        rnn = rnn_cls(
             input_size=input_dim,
             hidden_size=hidden_dim,
             num_layers=num_layers,
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0.0,
         )
+        setattr(self, rnn_attr_name, rnn)
         self.category_embedding = nn.Embedding(num_categories, category_embed_dim)
         static_input_dim = static_num_features + category_embed_dim + text_embed_dim
         self.static_net = nn.Sequential(
@@ -60,7 +62,10 @@ class PriceSequenceGRU(nn.Module):
             batch_first=True,
             enforce_sorted=False,
         )
-        _, hidden = self.gru(packed)
+        rnn = getattr(self, self._rnn_attr_name)
+        _, hidden = rnn(packed)
+        if isinstance(hidden, tuple):
+            hidden = hidden[0]
         sequence_hidden = hidden[-1]
 
         cat_emb = self.category_embedding(category_ids)
@@ -69,3 +74,17 @@ class PriceSequenceGRU(nn.Module):
 
         fused = torch.cat([sequence_hidden, static_hidden], dim=1)
         return self.head(fused).squeeze(-1)
+
+
+class PriceSequenceGRU(_PriceSequenceRNNBase):
+    """GRU over fixed-grid sequences plus snapshot-compatible static context."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(nn.GRU, "gru", *args, **kwargs)
+
+
+class PriceSequenceLSTM(_PriceSequenceRNNBase):
+    """LSTM over fixed-grid sequences plus snapshot-compatible static context."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(nn.LSTM, "lstm", *args, **kwargs)

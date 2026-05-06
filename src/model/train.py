@@ -20,7 +20,7 @@ from .dataset import PolymarketDataset, create_train_val_test_dataloaders
 from .evaluate import collect_tabular_outputs, evaluate_model
 from .gbdt_train import train_gbdt_pipeline
 from .metrics import clip_probabilities_from_residual, compute_probability_metrics, sigmoid
-from .ts_train import train_ts_pipeline
+from .ts_train import train_lstm_pipeline, train_ts_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -440,7 +440,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Train snapshot-based p_yes models")
     parser.add_argument("--config", default="config/config.yaml")
-    parser.add_argument("--only", choices=["tabular", "ts", "gbdt", "catboost", "both", "all"], default="all")
+    parser.add_argument("--only", choices=["tabular", "ts", "lstm", "gbdt", "catboost", "both", "all"], default="all")
     parser.add_argument("--data-dir", default=None)
     parser.add_argument("--save-dir", default=None)
     parser.add_argument("--ts-data-dir", default=None)
@@ -457,14 +457,17 @@ def main() -> None:
         tabular_summary = train_tabular_pipeline(cfg, data_dir=args.data_dir, save_dir=args.save_dir)
     if args.only in {"ts", "both", "all"}:
         ts_summary = train_ts_pipeline(cfg, data_dir=args.ts_data_dir, save_dir=args.ts_save_dir)
+    lstm_summary = None
+    if args.only in {"lstm", "all"}:
+        lstm_summary = train_lstm_pipeline(cfg, data_dir=args.ts_data_dir, save_dir=args.ts_save_dir)
     if args.only in {"gbdt", "all"}:
         gbdt_summary = train_gbdt_pipeline(cfg, data_dir=args.data_dir)
     if args.only in {"catboost", "all"}:
         catboost_summary = train_catboost_pipeline(cfg, data_dir=args.data_dir)
 
-    if args.only in {"both", "all"} and any(summary is not None for summary in [tabular_summary, ts_summary, gbdt_summary, catboost_summary]):
+    if args.only in {"both", "all"} and any(summary is not None for summary in [tabular_summary, ts_summary, lstm_summary, gbdt_summary, catboost_summary]):
         models_root = Path(cfg.get("training", {}).get("save_dir", "data/models/market_value_baseline")).parent
-        comparison = save_model_comparison(tabular_summary, ts_summary, gbdt_summary, catboost_summary, output_dir=models_root)
+        comparison = save_model_comparison(tabular_summary, ts_summary, lstm_summary, gbdt_summary, catboost_summary, output_dir=models_root)
         logger.info("Primary model selected: %s", comparison["primary_model"]["name"])
 
 

@@ -19,8 +19,18 @@ venv/
 .vscode/
 *.swp
 
+# Local AI/agent tooling
+.claude/
+.agents/
+.codex/
+CLAUDE.md
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Local plotting caches
+.mplconfig/
+**/.mplconfig/
 
 prompts/
